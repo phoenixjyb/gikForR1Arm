@@ -7,8 +7,8 @@ load ("bottle.mat") % this bottle.mat is created by createBottle.m file
 
 % --- Move bottle and keep its grasp offset consistent ---
 % define offset values in terms of tr
-x_value = 0.4; % Move bottle to X=0.4m
-yaw_value = 30; % 30 deg yaw
+x_value = 0.0; % Move bottle to X=0.0m
+yaw_value = 0.0; % 0 deg yaw
 T_shift  = trvec2tform([x_value, 0, 0]);                 
 T_rotZ30 = axang2tform([0 0 1 deg2rad(yaw_value)]); 
 
@@ -21,7 +21,7 @@ bottleInB.pose = T_shift * T_rotZ30 * bottleInB.pose;
 bottleInB.collision.Pose = bottleInB.pose;
 
 % 3️⃣ Re‑establish the graspPose using the stored local offset and add a tool offset
-graspOffset = trvec2tform([0.08, 0, 0]); % 8cm forward offset for the tool
+graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
 load ('table.mat');% also need to load a table
@@ -32,6 +32,18 @@ eeName = 'left_gripper_link'; % end-effector name for left arm'; this shall be t
 %%%% arm initial position %%%%%
 % 1.56,2.94,-2.54,0.0,0.0,0.0 for left arm
 % -1.56,2.94,-2.54,0.0,0.0,0.0 for right arm
+
+% === Define Initial Robot Configuration ===
+initialGuess = homeConfiguration(robotB);
+initialGuess = updateHomePositionforR1_wholeBody(initialGuess);
+
+% Ensure finger joints start in open position
+fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
+for i = 1:numel(initialGuess)
+    if ismember(initialGuess(i).JointName, fingerJointNames)
+        initialGuess(i).JointPosition = 0.05; % Set fingers to open position (0.05 = fully open)
+    end
+end
 
 %%%%%% define the table to avoid and adding more 
 %% 1.  Attach the box to the robot as a fixed body
@@ -123,6 +135,9 @@ assert(all(ismember(torsoJointsStr, allJointNames)), 'One or more torsoJoints no
 assert(all(ismember(leftArmJointsStr, allJointNames)), 'One or more leftArmJoints not found in robotB.');
 
 targetPose = bottleInB.graspPose;
+
+% Extract grasp position for reachability checking
+graspPos = tform2trvec(targetPose);
 
 % === GIK-based Reachability Check ===
 fprintf('Performing GIK-based reachability check...\n');
@@ -278,12 +293,14 @@ hold on;
 show(bottleInB.collision);
 plotTransforms(tform2trvec(bottleInB.graspPose), tform2quat(bottleInB.graspPose), 'FrameSize', 0.05);
 
-    nTotal = size(traj,1);
+nTotal = size(traj,1);
 for t = 1:nTotal
-    qNow = qClose;  % Use qClose as base configuration
+    % Create configuration from trajectory data directly
+    qNow = initialGuess;  % Start with initial configuration
     for j = 1:numel(qNow)
         qNow(j).JointPosition = traj(t,j);
     end
+    
     show(robotB, qNow, 'PreservePlot', false, 'Parent', ax);
     pause(0.5)
     drawnow;
@@ -311,6 +328,7 @@ fwrite(fid, jsonStr, 'char');
 fclose(fid);
 %}
 
+%% helper functions
 function [success, qNewTorso] = solveTorsoToHelpReach(robot, targetPose, torsoJoints, armJoints, eeName)
     gik = generalizedInverseKinematics( ...
         'RigidBodyTree', robot, ...
@@ -388,38 +406,54 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
     else
         jointTgt = jointBounds;
     end
+    
+    % Find finger joint indices to keep them open during stages 1 and 2
+    fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
+    fingerIndices = [];
+    for i = 1:numel(initialGuess)
+        if ismember(initialGuess(i).JointName, fingerJointNames)
+            fingerIndices = [fingerIndices, i];
+        end
+    end
+    
+    % Create joint constraints that lock finger joints to open position (0.05) for stages 1 and 2
+    jointTgt_stages12 = jointTgt;
+    if ~isempty(fingerIndices)
+        for idx = fingerIndices
+            jointTgt_stages12.Bounds(idx,:) = [0.05, 0.05]; % Keep fingers open at position 0.05
+        end
+    end
+    
     allDist = [distConstraints{:}];
 
-    % Solve GIK for approach and grasp stages
-    [qApproach, solutionInfo] = gik(initialGuess, poseApproach, jointTgt, allDist);
-    [qGrasp, solutionInfo2] = gik(qApproach, poseGrasp, jointTgt, allDist);
+    % Solve GIK for approach and grasp stages with fingers kept open
+    [qApproach, solutionInfo] = gik(initialGuess, poseApproach, jointTgt_stages12, allDist);
+    [qGrasp, solutionInfo2] = gik(qApproach, poseGrasp, jointTgt_stages12, allDist);
 
     % Stage 3: Close fingers for grasping
     qClose = qGrasp;
     
     % --- Calculate required finger position based on bottle diameter ---
-    % Based on URDF, initial finger gap is ~2.7cm. Each joint moves one finger.
-    initialFingerGap = 0.0269; % Approximate gap when joints are at 0
+    % Based on URDF, finger joints are prismatic with limits [0, 0.05]
+    % Position 0.05 = fully open, Position 0.0 = fully closed
+    initialFingerGap = 0.0269 + 0.05 * 2; % Gap when joints are at 0.05 (open) - each finger moves 0.05m
     targetFingerGap = bottleDiameter;
     
-    % The required joint position 'd' for each finger is (targetGap - initialGap) / 2
-    % Assuming both fingers move by the same amount 'd'.
-    fingerJointPos = (targetFingerGap - initialFingerGap) / 2;
+    % Calculate how much to close the fingers
+    % If we want to reduce the gap from initialFingerGap to targetFingerGap,
+    % each finger needs to move inward by (initialFingerGap - targetFingerGap) / 2
+    fingerClosingDistance = (initialFingerGap - targetFingerGap) / 2;
+    fingerJointPos = 0.05 - fingerClosingDistance;
     
     % Clamp the value to be within joint limits [0, 0.05]
     fingerJointPos = max(0, min(0.05, fingerJointPos));
     
     fprintf('Target bottle diameter: %.4f m\n', bottleDiameter);
+    fprintf('Initial finger gap (open): %.4f m\n', initialFingerGap);
+    fprintf('Target finger gap: %.4f m\n', targetFingerGap);
+    fprintf('Finger closing distance per finger: %.4f m\n', fingerClosingDistance);
     fprintf('Calculated finger joint position: %.4f\n', fingerJointPos);
-    
-    % Find finger joint indices
-    fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
-    fingerIndices = [];
-    for i = 1:numel(qClose)
-        if ismember(qClose(i).JointName, fingerJointNames)
-            fingerIndices = [fingerIndices, i];
-        end
-    end
+    fprintf('Finger closing distance: %.4f m\n', 0.05 - fingerJointPos);
     
     % Close fingers to the calculated position
     if ~isempty(fingerIndices)
