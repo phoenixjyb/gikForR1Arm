@@ -24,14 +24,13 @@ bottleInB.collision.Pose = bottleInB.pose;
 graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
-load ('table.mat');% also need to load a table
-robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');   
-eeName = 'left_gripper_link'; % end-effector name for left arm'; this shall be the target pose for the GIK solver;
+load ('table.mat');
+robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
+eeName = 'left_gripper_link';
 
-% eeName = 'left_tool_tip'; % end-effector name the actually gripper's tip'; this shall be the target pose for the GIK solver;
-%%%% arm initial position %%%%%
-% 1.56,2.94,-2.54,0.0,0.0,0.0 for left arm
-% -1.56,2.94,-2.54,0.0,0.0,0.0 for right arm
+% Arm initial position reference
+% Left arm: 1.56, 2.94, -2.54, 0.0, 0.0, 0.0
+% Right arm: -1.56, 2.94, -2.54, 0.0, 0.0, 0.0
 
 % === Define Initial Robot Configuration ===
 initialGuess = homeConfiguration(robotB);
@@ -311,6 +310,10 @@ show(robotB, qClose, 'PreservePlot', false, 'Parent', ax);
 title('Final state: Gripper closed around bottle');
 pause(1);
 
+% Save final configuration for visualization
+save('final_configuration.mat', 'qClose', 'bottleInB', 'tableBox');
+fprintf('Final configuration saved to final_configuration.mat\n');
+
 %% save file as json
 % {
 % Convert to a cell array of rows
@@ -387,19 +390,54 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
         'RigidBodyTree', robot, ...
         'ConstraintInputs', {'pose', 'joint','distance'});
 
-    % Define approach pose
-    approachOffset = trvec2tform([0, 0, -0.1]);  % 10 cm above grasp pose
-    approachPose = graspPose * approachOffset;
+    % --- Finger Position Calculation (as before) ---
+    % Based on URDF, finger joints are prismatic with limits [0, 0.05]
+    % Position 0.05 = fully open, Position 0.0 = fully closed
+    initialFingerGap = 0.0269 + 0.05 * 2; % Gap when joints are at 0.05 (open) - each finger moves 0.05m
+    targetFingerGap = bottleDiameter;
+    
+    % Calculate how much to close the fingers
+    % If we want to reduce the gap from initialFingerGap to targetFingerGap,
+    % each finger needs to move inward by (initialFingerGap - targetFingerGap) / 2
+    fingerClosingDistance = (initialFingerGap - targetFingerGap) / 2;
+    fingerJointPos = 0.05 - fingerClosingDistance;
+    
+    % Clamp the value to be within joint limits [0, 0.05]
+    fingerJointPos = max(0, min(0.05, fingerJointPos));
+    
+    fprintf('Target bottle diameter: %.4f m\n', bottleDiameter);
+    fprintf('Initial finger gap (open): %.4f m\n', initialFingerGap);
+    fprintf('Target finger gap: %.4f m\n', targetFingerGap);
+    fprintf('Finger closing distance per finger: %.4f m\n', fingerClosingDistance);
+    fprintf('Calculated finger joint position: %.4f\n', fingerJointPos);
+    fprintf('Finger closing distance: %.4f m\n', 0.05 - fingerJointPos);
+    
+    % --- Define Virtual Target for the Gripper Link ---
+    % The `graspPose` is the target for the point of contact on the bottle.
+    % We need to calculate a "virtual" target for `eeName` (the gripper link)
+    % so that its fingers end up aligned with the graspPose.
+    
+    % This transform defines the finger's position relative to the gripper link at the final grasp.
+    T_gripper_to_finger = trvec2tform([0.03689, 0.013453 + fingerJointPos, 0.00012067]);
+    
+    % To make the finger reach graspPose, the gripper must target a pose "backed off" by this transform.
+    virtualGraspPose = graspPose * inv(T_gripper_to_finger);
+    fprintf('INFO: Gripper target pose adjusted with virtual offset to position fingers correctly.\n');
 
-    % Pose constraints
+    % --- Define Approach and Grasp Constraints ---
+    % Define approach pose relative to the gripper's final (virtual) target pose
+    approachOffset = trvec2tform([0, 0, -0.1]);
+    approachPose = virtualGraspPose * approachOffset;
+
+    % Pose constraints for the gripper link (eeName)
     poseApproach = constraintPoseTarget(eeName);
     poseApproach.TargetTransform = approachPose;
     poseApproach.Weights = [0.5, 0.5];
 
     poseGrasp = constraintPoseTarget(eeName);
-    poseGrasp.TargetTransform = graspPose;
+    poseGrasp.TargetTransform = virtualGraspPose;
     poseGrasp.Weights = [0.5, 0.5];
-
+    
     % Joint constraint
     if nargin < 6
         jointTgt = constraintJointBounds(robot);
@@ -432,28 +470,6 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
 
     % Stage 3: Close fingers for grasping
     qClose = qGrasp;
-    
-    % --- Calculate required finger position based on bottle diameter ---
-    % Based on URDF, finger joints are prismatic with limits [0, 0.05]
-    % Position 0.05 = fully open, Position 0.0 = fully closed
-    initialFingerGap = 0.0269 + 0.05 * 2; % Gap when joints are at 0.05 (open) - each finger moves 0.05m
-    targetFingerGap = bottleDiameter;
-    
-    % Calculate how much to close the fingers
-    % If we want to reduce the gap from initialFingerGap to targetFingerGap,
-    % each finger needs to move inward by (initialFingerGap - targetFingerGap) / 2
-    fingerClosingDistance = (initialFingerGap - targetFingerGap) / 2;
-    fingerJointPos = 0.05 - fingerClosingDistance;
-    
-    % Clamp the value to be within joint limits [0, 0.05]
-    fingerJointPos = max(0, min(0.05, fingerJointPos));
-    
-    fprintf('Target bottle diameter: %.4f m\n', bottleDiameter);
-    fprintf('Initial finger gap (open): %.4f m\n', initialFingerGap);
-    fprintf('Target finger gap: %.4f m\n', targetFingerGap);
-    fprintf('Finger closing distance per finger: %.4f m\n', fingerClosingDistance);
-    fprintf('Calculated finger joint position: %.4f\n', fingerJointPos);
-    fprintf('Finger closing distance: %.4f m\n', 0.05 - fingerJointPos);
     
     % Close fingers to the calculated position
     if ~isempty(fingerIndices)
