@@ -1,0 +1,58 @@
+<?xml version="1.0" ?>
+<robot name="robotRight">
+  <link name="world_to_arm_offset"/>
+  <joint name="fix_offset" type="fixed">
+    <parent link="base"/>
+    <child link="world_to_arm_offset"/>
+    <origin xyz="-0.032067 -0.097235 1.403470" rpy="-0.000000 0.000000 -0.000000"/>
+  </joint>
+  <link name="right_arm_link1"/>
+  <joint name="right_arm_joint1" type="revolute">
+    <parent link="world_to_arm_offset"/>
+    <child link="right_arm_link1"/>
+    <origin xyz="-0.001115 -0.044600 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+    <axis xyz="0.000000 -1.000000 0.000000"/>
+  </joint>
+  <link name="right_arm_link2"/>
+  <joint name="right_arm_joint2" type="revolute">
+    <parent link="right_arm_link1"/>
+    <child link="right_arm_link2"/>
+    <origin xyz="0.000000 -0.106100 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+    <axis xyz="0.000000 0.000000 1.000000"/>
+  </joint>
+  <link name="right_arm_link3"/>
+  <joint name="right_arm_joint3" type="revolute">
+    <parent link="right_arm_link2"/>
+    <child link="right_arm_link3"/>
+    <origin xyz="-0.349280 -0.020002 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+    <axis xyz="0.000000 0.000000 1.000000"/>
+  </joint>
+  <link name="right_arm_link4"/>
+  <joint name="right_arm_joint4" type="revolute">
+    <parent link="right_arm_link3"/>
+    <child link="right_arm_link4"/>
+    <origin xyz="0.027350 -0.069767 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+    <axis xyz="1.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="right_arm_link5"/>
+  <joint name="right_arm_joint5" type="revolute">
+    <parent link="right_arm_link4"/>
+    <child link="right_arm_link5"/>
+    <origin xyz="0.246300 0.000501 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+    <axis xyz="0.000000 -1.000000 0.000000"/>
+  </joint>
+  <link name="right_arm_link6"/>
+  <joint name="right_arm_joint6" type="revolute">
+    <parent link="right_arm_link5"/>
+    <child link="right_arm_link6"/>
+    <origin xyz="0.058249 -0.000500 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+    <axis xyz="1.000000 0.000000 0.000000"/>
+  </joint>
+  <link name="right_gripper_link"/>
+  <joint name="right_gripper_joint" type="fixed">
+    <parent link="right_arm_link6"/>
+    <child link="right_gripper_link"/>
+    <origin xyz="0.103900 0.000000 0.000000" rpy="-0.000000 0.000000 -0.000000"/>
+  </joint>
+  <link name="base"/>
+</robot>

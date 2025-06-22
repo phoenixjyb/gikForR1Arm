@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<robot name="Robot">
+    <link name="base">
+        <inertial>
+            <mass value="0"/>
+            <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+        </inertial>
+    </link>
+    <link name="left_end_effector_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.00000000"/>
+            <mass value="0.00000000"/>
+            <inertia ixx="0.00000000" ixy="0.00000000" ixz="0.00000000" iyy="0.00000000" iyz="0.00000000" izz="0.00000000"/>
+        </inertial>
+    </link>
+    <link name="left_hand_pitch_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000  0.00129200 -0.01174000"/>
+            <mass value="0.02955000"/>
+            <inertia ixx="0.00000538" ixy="0.00000000" ixz="0.00000000" iyy="0.00001000" iyz="-0.00000046" izz="0.00000892"/>
+        </inertial>
+    </link>
+    <link name="left_hand_roll_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000  0.00129200 -0.01174000"/>
+            <mass value="0.02955000"/>
+            <inertia ixx="0.00000538" ixy="0.00000000" ixz="0.00000000" iyy="0.00001000" iyz="-0.00000046" izz="0.00000892"/>
+        </inertial>
+    </link>
+    <link name="left_hand_yaw_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="-0.00002923  0.00212400 -0.06117000"/>
+            <mass value="0.89000000"/>
+            <inertia ixx="0.00186700" ixy="0.00000031" ixz="0.00001064" iyy="0.00186300" iyz="0.00001649" izz="0.00032110"/>
+        </inertial>
+        <collision>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00108925 -0.00154111 -0.07604285"/>
+            <geometry>
+                <cylinder radius="0.04157192" length="0.13918736"/>
+            </geometry>
+        </collision>
+    </link>
+    <link name="left_lower_arm_pitch_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000331  0.00784600 -0.02549000"/>
+            <mass value="0.32000000"/>
+            <inertia ixx="0.00029160" ixy="0.00000001" ixz="-0.00000006" iyy="0.00028480" iyz="-0.00004858" izz="0.00010900"/>
+        </inertial>
+    </link>
+    <link name="left_upper_arm_pitch_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00323000 0.05324000 0.00019200"/>
+            <mass value="0.81000000"/>
+            <inertia ixx="0.00202400" ixy="-0.00009670" ixz="-0.00000042" iyy="0.00050000" iyz="0.00000171" izz="0.00195700"/>
+        </inertial>
+    </link>
+    <link name="left_upper_arm_roll_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00342700  0.01466000 -0.02316000"/>
+            <mass value="0.50000000"/>
+            <inertia ixx="0.00087490" ixy="-0.00001593" ixz="0.00000296" iyy="0.00069580" iyz="0.00028630" izz="0.00041190"/>
+        </inertial>
+    </link>
+    <link name="left_upper_arm_yaw_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00005470  0.00201300 -0.08520000"/>
+            <mass value="0.55000000"/>
+            <inertia ixx="0.00354400" ixy="-0.00000018" ixz="-0.00000175" iyy="0.00353700" iyz="0.00009928" izz="0.00025120"/>
+        </inertial>
+        <collision>
+            <origin rpy="-3.12559545  0.00151248 -0.18852852" xyz="0.00003949 -0.00089429 -0.07934004"/>
+            <geometry>
+                <cylinder radius="0.03623321" length="0.16988399"/>
+            </geometry>
+        </collision>
+    </link>
+    <link name="torso_link">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="-0.00667000  0.00015330  0.01837000"/>
+            <mass value="6.40000000"/>
+            <inertia ixx="0.04162000" ixy="0.00002011" ixz="-0.00169100" iyy="0.03127000" iyz="0.00001097" izz="0.02553000"/>
+        </inertial>
+        <collision>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="-0.01581593  0.00519537 -0.01252051"/>
+            <geometry>
+                <cylinder radius="0.12742741" length="0.16038600"/>
+            </geometry>
+        </collision>
+    </link>
+    <link name="world_to_arm_offset">
+        <inertial>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.00000000"/>
+            <mass value="1.00000000"/>
+            <inertia ixx="1.00000000" ixy="0.00000000" ixz="0.00000000" iyy="1.00000000" iyz="0.00000000" izz="1.00000000"/>
+        </inertial>
+    </link>
+    <joint name="fix_offset" type="fixed">
+        <parent link="base"/>
+        <child link="world_to_arm_offset"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="-0.00414000  0.00000000  0.32901000"/>
+        <axis xyz="100"/>
+    </joint>
+    <joint name="left_elbow_pitch_joint" type="revolute">
+        <parent link="left_upper_arm_yaw_link"/>
+        <child link="left_lower_arm_pitch_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000  0.00000000 -0.17510000"/>
+        <axis xyz="0.00000000 1.00000000 0.00000000"/>
+        <limit lower="-2.27000000" upper="2.27000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="left_end_effector_joint" type="fixed">
+        <parent link="left_hand_pitch_link"/>
+        <child link="left_end_effector_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.00000000"/>
+        <axis xyz="100"/>
+    </joint>
+    <joint name="left_shoulder_pitch_joint" type="revolute">
+        <parent link="torso_link"/>
+        <child link="left_upper_arm_pitch_link"/>
+        <origin rpy="0.43633000 0.00000000 0.00000000" xyz="0.00000000 0.10111000 0.04714900"/>
+        <axis xyz="0.00000000 1.00000000 0.00000000"/>
+        <limit lower="-2.79000000" upper="1.92000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="left_shoulder_roll_joint" type="revolute">
+        <parent link="left_upper_arm_pitch_link"/>
+        <child link="left_upper_arm_roll_link"/>
+        <origin rpy="-0.43633000  0.00000000  0.00000000" xyz="0.00000000 0.09515000 0.00000000"/>
+        <axis xyz="1.00000000 0.00000000 0.00000000"/>
+        <limit lower="-0.57000000" upper="3.27000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="left_shoulder_yaw_joint" type="revolute">
+        <parent link="left_upper_arm_roll_link"/>
+        <child link="left_upper_arm_yaw_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000  0.04000000 -0.07095000"/>
+        <axis xyz="0.00000000 0.00000000 1.00000000"/>
+        <limit lower="-2.97000000" upper="2.97000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="left_wrist_pitch_joint" type="revolute">
+        <parent link="left_hand_roll_link"/>
+        <child link="left_hand_pitch_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.00000000"/>
+        <axis xyz="0.00000000 1.00000000 0.00000000"/>
+        <limit lower="-0.61000000" upper="0.61000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="left_wrist_roll_joint" type="revolute">
+        <parent link="left_hand_yaw_link"/>
+        <child link="left_hand_roll_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000  0.00000000 -0.18765000"/>
+        <axis xyz="1.00000000 0.00000000 0.00000000"/>
+        <limit lower="-0.87000000" upper="0.96000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="left_wrist_yaw_joint" type="revolute">
+        <parent link="left_lower_arm_pitch_link"/>
+        <child link="left_hand_yaw_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000  0.00005033 -0.05395000"/>
+        <axis xyz="0.00000000 0.00000000 1.00000000"/>
+        <limit lower="-2.97000000" upper="2.97000000" effort="0" velocity="0"/>
+    </joint>
+    <joint name="torso_joint" type="fixed">
+        <parent link="world_to_arm_offset"/>
+        <child link="torso_link"/>
+        <origin rpy="0.00000000 0.00000000 0.00000000" xyz="-0.00414000  0.00000000  0.16071000"/>
+        <axis xyz="100"/>
+    </joint>
+</robot>
