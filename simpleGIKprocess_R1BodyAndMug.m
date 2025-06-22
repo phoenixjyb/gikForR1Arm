@@ -283,32 +283,35 @@ fprintf('left_gripper_finger_link1: (X, Y, Z) = (%.4f, %.4f, %.4f)\n', pos_finge
 fprintf('left_gripper_finger_link2: (X, Y, Z) = (%.4f, %.4f, %.4f)\n', pos_finger2(1), pos_finger2(2), pos_finger2(3));
 fprintf('-----------------------------------------------------\n\n');
 
+% Print x difference between finger center and bottle center
+finger_center_x = (pos_finger1(1) + pos_finger2(1)) / 2;
+x_diff = finger_center_x - pos_bottle(1);
+fprintf('X difference (finger center - bottle center): %.6f m\n', x_diff);
+
 %%
 % === Animate ===
-figure;
-ax = axes; view(3); axis equal; grid on;
-show(robotB, qApproach, 'PreservePlot', false, 'Parent', ax);
-hold on;
-show(bottleInB.collision);
-plotTransforms(tform2trvec(bottleInB.graspPose), tform2quat(bottleInB.graspPose), 'FrameSize', 0.05);
-
-nTotal = size(traj,1);
-for t = 1:nTotal
-    % Create configuration from trajectory data directly
-    qNow = initialGuess;  % Start with initial configuration
-    for j = 1:numel(qNow)
-        qNow(j).JointPosition = traj(t,j);
-    end
-    
-    show(robotB, qNow, 'PreservePlot', false, 'Parent', ax);
-    pause(0.5)
-    drawnow;
-end
+% figure;
+% ax = axes; view(3); axis equal; grid on;
+% show(robotB, qApproach, 'PreservePlot', false, 'Parent', ax);
+% hold on;
+% show(bottleInB.collision);
+% plotTransforms(tform2trvec(bottleInB.graspPose), tform2quat(bottleInB.graspPose), 'FrameSize', 0.05);
+% nTotal = size(traj,1);
+% for t = 1:nTotal
+%     % Create configuration from trajectory data directly
+%     qNow = initialGuess;  % Start with initial configuration
+%     for j = 1:numel(qNow)
+%         qNow(j).JointPosition = traj(t,j);
+%     end
+%     show(robotB, qNow, 'PreservePlot', false, 'Parent', ax);
+%     pause(0.5)
+%     drawnow;
+% end
 
 % Show final closed gripper state
-show(robotB, qClose, 'PreservePlot', false, 'Parent', ax);
-title('Final state: Gripper closed around bottle');
-pause(1);
+% show(robotB, qClose, 'PreservePlot', false, 'Parent', ax);
+% title('Final state: Gripper closed around bottle');
+% pause(1);
 
 % Save final configuration for visualization
 save('final_configuration.mat', 'qClose', 'bottleInB', 'tableBox');
@@ -417,12 +420,17 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
     % We need to calculate a "virtual" target for `eeName` (the gripper link)
     % so that its fingers end up aligned with the graspPose.
     
-    % This transform defines the finger's position relative to the gripper link at the final grasp.
-    T_gripper_to_finger = trvec2tform([0.03689, 0.013453 + fingerJointPos, 0.00012067]);
+    % Compute the midpoint between the two fingers for the grasp point
+    y1 = 0.013453 + fingerJointPos;
+    y2 = -0.013453 - fingerJointPos;
+    y_mid = (y1 + y2) / 2;
+    finger_link_length = 0.045; % Finer adjustment for length from joint to tip
+    x_offset = 0.03689 + finger_link_length;
+    T_gripper_to_finger_mid = trvec2tform([x_offset, y_mid, 0.00012067]);
     
-    % To make the finger reach graspPose, the gripper must target a pose "backed off" by this transform.
-    virtualGraspPose = graspPose * inv(T_gripper_to_finger);
-    fprintf('INFO: Gripper target pose adjusted with virtual offset to position fingers correctly.\n');
+    % To make the finger midpoint reach graspPose, the gripper must target a pose "backed off" by this transform.
+    virtualGraspPose = graspPose * inv(T_gripper_to_finger_mid);
+    fprintf('INFO: Gripper target pose adjusted with updated X offset (midpoint) to position fingers correctly.\n');
 
     % --- Define Approach and Grasp Constraints ---
     % Define approach pose relative to the gripper's final (virtual) target pose
