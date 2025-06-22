@@ -10,6 +10,7 @@ if ~exist('final_configuration.mat', 'file')
 end
 
 load('final_configuration.mat');
+load('table.mat'); % Load actual table properties
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
 
 % Get final positions
@@ -22,9 +23,9 @@ pos_finger1 = tform2trvec(T_finger1);
 pos_finger2 = tform2trvec(T_finger2);
 pos_bottle = tform2trvec(bottleInB.pose);
 
-% Get table position (assuming it's at origin with some dimensions)
-table_pos = [0, 0, 0]; % Table is typically at ground level
-table_size = [1.0, 0.6, 0.02]; % Approximate table dimensions
+% Get table position and dimensions from actual table.mat
+table_pos = tform2trvec(tableBox.Pose); % Extract position from pose matrix
+table_size = [tableBox.X, tableBox.Y, tableBox.Z]; % Use actual dimensions
 
 % Create figure with subplots
 figure('Position', [100, 100, 1200, 500]);
@@ -125,6 +126,8 @@ fprintf('Plot saved as final_positions_plot.png\n');
 
 % Print position information
 fprintf('\n=== Final Position Summary ===\n');
+fprintf('Table Center:      (%.3f, %.3f, %.3f) m\n', table_pos(1), table_pos(2), table_pos(3));
+fprintf('Table Dimensions:  %.3f x %.3f x %.3f m\n', table_size(1), table_size(2), table_size(3));
 fprintf('Bottle Center:     (%.3f, %.3f, %.3f) m\n', pos_bottle(1), pos_bottle(2), pos_bottle(3));
 fprintf('Gripper Link:      (%.3f, %.3f, %.3f) m\n', pos_gripper(1), pos_gripper(2), pos_gripper(3));
 fprintf('Finger 1:          (%.3f, %.3f, %.3f) m\n', pos_finger1(1), pos_finger1(2), pos_finger1(3));
