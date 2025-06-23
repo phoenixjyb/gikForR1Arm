@@ -5,7 +5,7 @@ robotB.Gravity = [0 0 -9.81];
 endEffectorNameB = robotB.BodyNames{end};
 numSamples = 5000;
 eePosBs = computeReachableWorkspace(robotB,endEffectorNameB,numSamples);
-[x,y,z,bottleInB,tableBox] = createBottleAndTable(eePosBs,robotB); 
+[bottleInB,tableBox,cardbox] = generateBottleAndTable(eePosBs,robotB); 
 save ('bottle.mat','bottleInB');
 save ('table.mat','tableBox');
 

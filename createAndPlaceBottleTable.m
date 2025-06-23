@@ -1,4 +1,5 @@
 %% create a bottle so that robot can reach
+addpath(fullfile(pwd, 'backupFiles'));
 addpath(fullfile(pwd, 'backupFiles', 'reachableWorkspace'));
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf'); % Use full-body URDF for consistency
 robotB.DataFormat = 'struct';
@@ -8,9 +9,10 @@ endEffectorNameB = 'left_gripper_link';
 % Calculate reachable workspace points using the unified function
 eePosBs = sampleReachableWorkspace(robotB, endEffectorNameB);
 
-[x,y,z,bottleInB,tableBox] = createBottleAndTable(eePosBs,robotB); 
+[bottleInB,tableBox,cardbox] = generateBottleAndTable(eePosBs,robotB); 
 save ('bottle.mat','bottleInB');
 save ('table.mat','tableBox');
+save ('cardbox.mat','cardbox');
 
 % Check if bottle's grasp pose is reachable
 graspPos = tform2trvec(bottleInB.graspPose);
