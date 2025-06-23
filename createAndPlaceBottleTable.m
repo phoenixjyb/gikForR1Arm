@@ -7,7 +7,8 @@ robotB.Gravity = [0 0 -9.81];
 endEffectorNameB = 'left_gripper_link';
 
 % Calculate reachable workspace points using the unified function
-eePosBs = sampleReachableWorkspace(robotB, endEffectorNameB);
+leftArmJoints = {'left_arm_joint1','left_arm_joint2','left_arm_joint3','left_arm_joint4','left_arm_joint5','left_arm_joint6'};
+eePosBs = sampleReachableWorkspace(robotB, endEffectorNameB, 5000, false, leftArmJoints);
 
 [bottleInB,tableBox,cardbox] = generateBottleAndTable(eePosBs,robotB); 
 save ('bottle.mat','bottleInB');
