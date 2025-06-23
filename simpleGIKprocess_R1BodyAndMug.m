@@ -104,7 +104,11 @@ approachPose = bottleInB.graspPose * approachOffset;
 
 poseApproach = constraintPoseTarget(eeName);
 poseApproach.TargetTransform = approachPose;
-poseApproach.Weights = [1, 1];
+poseApproach.Weights = [1, 0.5];
+
+poseGrasp = constraintPoseTarget(eeName);
+poseGrasp.TargetTransform = bottleInB.graspPose;
+poseGrasp.Weights = [1, 0.5];
 
 %%
 % check reachability and adjust torso if necessary
@@ -163,19 +167,39 @@ isReachable = strcmpi(solutionInfo_check.Status, 'success');
 if isReachable
     disp('GIK Check SUCCESS: Grasp pose is reachable using fixed torso.');
 
-    % Lock all joints except left arm
+    % Lock all joints except left arm and finger joints
+    allowedJoints = [leftArmJointsStr(:); string(fingerJointNames(:))];
     jointBounds = constraintJointBounds(robotB);
     for i = 1:numel(initialGuess)
         jointName = initialGuess(i).JointName;
-        if ~ismember(jointName, leftArmJointsStr)
+        if ~ismember(jointName, allowedJoints)
             fixedPos = initialGuess(i).JointPosition;
             jointBounds.Bounds(i,:) = [fixedPos, fixedPos];
         end
     end
 
+    % Find finger joint indices to keep them open during stages 1 and 2
+    fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
+    fingerIndices = [];
+    for i = 1:numel(initialGuess)
+        if ismember(initialGuess(i).JointName, fingerJointNames)
+            fingerIndices = [fingerIndices, i];
+        end
+    end
+    % Use jointBounds for jointTgt_stages12 and pass to solveGraspGIK
+    jointTgt_stages12 = jointBounds;
+    if ~isempty(fingerIndices)
+        for idx = fingerIndices
+            jointTgt_stages12.Bounds(idx,:) = [0.05, 0.05]; % Keep fingers open at position 0.05
+        end
+    end
+
+    % Table collision avoidance constraints remain active (allDist)
+    allDist = [distCs{:}];
+
     % Solve GIK with torso and right arm locked
     bottleDiameter = bottleInB.collision.Radius * 2;
-    [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointBounds, bottleDiameter);
+    [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointTgt_stages12, bottleDiameter);
     
 else
     disp('GIK Check FAILED: Grasp pose is unreachable with fixed torso.  ▶  Stage 2: torso adjustment');
@@ -228,21 +252,40 @@ else
     % Update initial guess with chosen torso joints
     initialGuess = qTorsoChosen;
 
-    % Lock only torso + left arm for final GIK solve
+    % Lock all joints except left arm and finger joints
+    allowedJoints = [leftArmJointsStr(:); string(fingerJointNames(:))];
     jointBounds = constraintJointBounds(robotB);
-    keepJoints = [torsoJointsStr; leftArmJointsStr];
-    keepJoints = keepJoints(:);  % ensure column vector
     for i = 1:numel(initialGuess)
-        jName = initialGuess(i).JointName;
-        if ~ismember(jName, keepJoints)
-            jointBounds.Bounds(i,:) = [initialGuess(i).JointPosition, initialGuess(i).JointPosition];
+        jointName = initialGuess(i).JointName;
+        if ~ismember(jointName, allowedJoints)
+            fixedPos = initialGuess(i).JointPosition;
+            jointBounds.Bounds(i,:) = [fixedPos, fixedPos];
         end
     end
+
+    % Find finger joint indices to keep them open during stages 1 and 2
+    fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
+    fingerIndices = [];
+    for i = 1:numel(initialGuess)
+        if ismember(initialGuess(i).JointName, fingerJointNames)
+            fingerIndices = [fingerIndices, i];
+        end
+    end
+    % Use jointBounds for jointTgt_stages12 and pass to solveGraspGIK
+    jointTgt_stages12 = jointBounds;
+    if ~isempty(fingerIndices)
+        for idx = fingerIndices
+            jointTgt_stages12.Bounds(idx,:) = [0.05, 0.05]; % Keep fingers open at position 0.05
+        end
+    end
+
+    % Table collision avoidance constraints remain active (allDist)
+    allDist = [distCs{:}];
 
     % Final two-stage GIK with updated torso
     bottleDiameter = bottleInB.collision.Radius * 2;
     [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = ...
-        solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointBounds, bottleDiameter);
+        solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointTgt_stages12, bottleDiameter);
 end
 
 
@@ -288,30 +331,111 @@ finger_center_x = (pos_finger1(1) + pos_finger2(1)) / 2;
 x_diff = finger_center_x - pos_bottle(1);
 fprintf('X difference (finger center - bottle center): %.6f m\n', x_diff);
 
-%%
-% === Animate ===
-% figure;
-% ax = axes; view(3); axis equal; grid on;
-% show(robotB, qApproach, 'PreservePlot', false, 'Parent', ax);
-% hold on;
-% show(bottleInB.collision);
-% plotTransforms(tform2trvec(bottleInB.graspPose), tform2quat(bottleInB.graspPose), 'FrameSize', 0.05);
-% nTotal = size(traj,1);
-% for t = 1:nTotal
-%     % Create configuration from trajectory data directly
-%     qNow = initialGuess;  % Start with initial configuration
-%     for j = 1:numel(qNow)
-%         qNow(j).JointPosition = traj(t,j);
-%     end
-%     show(robotB, qNow, 'PreservePlot', false, 'Parent', ax);
-%     pause(0.5)
-%     drawnow;
-% end
+% Print y difference between finger center and bottle center
+finger_center_y = (pos_finger1(2) + pos_finger2(2)) / 2;
+y_diff = finger_center_y - pos_bottle(2);
+fprintf('Y difference (finger center - bottle center): %.6f m\n', y_diff);
 
-% Show final closed gripper state
-% show(robotB, qClose, 'PreservePlot', false, 'Parent', ax);
-% title('Final state: Gripper closed around bottle');
-% pause(1);
+%%
+% === Animate (Enhanced Visualization) ===
+animSpeed = 0.2; % Animation speed (seconds per frame)
+
+figure('Name','R1 Arm Grasp Animation','Position',[100 100 1200 700]);
+ax = axes; view(45,30); axis equal; grid on; hold on;
+
+% Draw table as semi-transparent box
+if exist('tableBox','var')
+    [Xb,Yb,Zb] = meshgrid([-0.5 0.5]*tableBox.X, [-0.5 0.5]*tableBox.Y, [0 1]*tableBox.Z);
+    Xb = Xb(:) + tableBox.Pose(1,4);
+    Yb = Yb(:) + tableBox.Pose(2,4);
+    Zb = Zb(:) + tableBox.Pose(3,4);
+    fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
+end
+
+% Draw bottle as transparent cylinder
+bottle_radius = bottleInB.collision.Radius;
+bottle_height = bottleInB.collision.Length;
+pos_bottle = tform2trvec(bottleInB.pose);
+[bx,by,bz] = cylinder(bottle_radius,30);
+bz = bz * bottle_height + pos_bottle(3);
+surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
+
+% Mark approach, grasp, and close poses
+plot3(pos_bottle(1),pos_bottle(2),pos_bottle(3)+bottle_height/2,'ko','MarkerSize',10,'MarkerFaceColor','y');
+
+% Preallocate trajectory arrays
+nTotal = size(traj,1);
+gripper_traj = zeros(nTotal,3);
+finger1_traj = zeros(nTotal,3);
+finger2_traj = zeros(nTotal,3);
+finger_center_traj = zeros(nTotal,3);
+x_diff_traj = zeros(nTotal,1);
+y_diff_traj = zeros(nTotal,1);
+
+for t = 1:nTotal
+    qNow = initialGuess;
+    for j = 1:numel(qNow)
+        qNow(j).JointPosition = traj(t,j);
+    end
+    T_gripper = getTransform(robotB, qNow, 'left_gripper_link');
+    T_finger1 = getTransform(robotB, qNow, 'left_gripper_finger_link1');
+    T_finger2 = getTransform(robotB, qNow, 'left_gripper_finger_link2');
+    pos_gripper = tform2trvec(T_gripper);
+    pos_finger1 = tform2trvec(T_finger1);
+    pos_finger2 = tform2trvec(T_finger2);
+    gripper_traj(t,:) = pos_gripper;
+    finger1_traj(t,:) = pos_finger1;
+    finger2_traj(t,:) = pos_finger2;
+    finger_center_traj(t,:) = (pos_finger1 + pos_finger2)/2;
+    x_diff_traj(t) = finger_center_traj(t,1) - pos_bottle(1);
+    y_diff_traj(t) = finger_center_traj(t,2) - pos_bottle(2);
+end
+
+% Plot full trajectory paths
+plot3(gripper_traj(:,1),gripper_traj(:,2),gripper_traj(:,3),'r--','LineWidth',1.5);
+plot3(finger1_traj(:,1),finger1_traj(:,2),finger1_traj(:,3),'g-.','LineWidth',1);
+plot3(finger2_traj(:,1),finger2_traj(:,2),finger2_traj(:,3),'g-.','LineWidth',1);
+plot3(finger_center_traj(:,1),finger_center_traj(:,2),finger_center_traj(:,3),'b-','LineWidth',2);
+
+% Animation loop
+for t = 1:nTotal
+    qNow = initialGuess;
+    for j = 1:numel(qNow)
+        qNow(j).JointPosition = traj(t,j);
+    end
+    cla(ax);
+    % Table
+    if exist('tableBox','var')
+        fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
+    end
+    % Bottle
+    surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
+    % Trajectories
+    plot3(gripper_traj(1:t,1),gripper_traj(1:t,2),gripper_traj(1:t,3),'r--','LineWidth',1.5);
+    plot3(finger1_traj(1:t,1),finger1_traj(1:t,2),finger1_traj(1:t,3),'g-.','LineWidth',1);
+    plot3(finger2_traj(1:t,1),finger2_traj(1:t,2),finger2_traj(1:t,3),'g-.','LineWidth',1);
+    plot3(finger_center_traj(1:t,1),finger_center_traj(1:t,2),finger_center_traj(1:t,3),'b-','LineWidth',2);
+    % Robot
+    show(robotB, qNow, 'PreservePlot', false, 'Parent', ax);
+    % Stage markers
+    if t==1
+        title('Stage 1: Approach','FontSize',14,'Color','b');
+    elseif t==round(nTotal/2)
+        title('Stage 2: Grasp','FontSize',14,'Color','m');
+    elseif t==nTotal
+        title('Stage 3: Close','FontSize',14,'Color','r');
+    end
+    % Finger center to bottle center line
+    plot3([finger_center_traj(t,1) pos_bottle(1)], [finger_center_traj(t,2) pos_bottle(2)], [finger_center_traj(t,3) pos_bottle(3)], 'k:', 'LineWidth', 2);
+    % Real-time metrics
+    txt = sprintf('X diff: %.3f m\nY diff: %.3f m', x_diff_traj(t), y_diff_traj(t));
+    text(finger_center_traj(t,1), finger_center_traj(t,2), finger_center_traj(t,3)+0.05, txt, 'FontSize', 10, 'Color', 'k');
+    % Camera preset (isometric)
+    view(45,30);
+    xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
+    axis equal; grid on;
+    pause(animSpeed);
+end
 
 % Save final configuration for visualization
 save('final_configuration.mat', 'qClose', 'bottleInB', 'tableBox');
@@ -440,19 +564,12 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
     % Pose constraints for the gripper link (eeName)
     poseApproach = constraintPoseTarget(eeName);
     poseApproach.TargetTransform = approachPose;
-    poseApproach.Weights = [0.5, 0.5];
+    poseApproach.Weights = [1, 0.5];
 
     poseGrasp = constraintPoseTarget(eeName);
     poseGrasp.TargetTransform = virtualGraspPose;
-    poseGrasp.Weights = [0.5, 0.5];
-    
-    % Joint constraint
-    if nargin < 6
-        jointTgt = constraintJointBounds(robot);
-    else
-        jointTgt = jointBounds;
-    end
-    
+    poseGrasp.Weights = [1, 0.5];
+
     % Find finger joint indices to keep them open during stages 1 and 2
     fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
     fingerIndices = [];
@@ -461,15 +578,15 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
             fingerIndices = [fingerIndices, i];
         end
     end
-    
     % Create joint constraints that lock finger joints to open position (0.05) for stages 1 and 2
-    jointTgt_stages12 = jointTgt;
+    jointTgt_stages12 = jointBounds;
     if ~isempty(fingerIndices)
         for idx = fingerIndices
             jointTgt_stages12.Bounds(idx,:) = [0.05, 0.05]; % Keep fingers open at position 0.05
         end
     end
-    
+
+    % Table collision avoidance constraints remain active (allDist)
     allDist = [distConstraints{:}];
 
     % Solve GIK for approach and grasp stages with fingers kept open
@@ -505,4 +622,27 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
     end
 
     traj = [traj1; traj2; traj3];
+
+    % Print minimum distance between finger center and bottle after each stage
+    T_finger1_approach = getTransform(robot, qApproach, 'left_gripper_finger_link1');
+    T_finger2_approach = getTransform(robot, qApproach, 'left_gripper_finger_link2');
+    pos_finger1_approach = tform2trvec(T_finger1_approach);
+    pos_finger2_approach = tform2trvec(T_finger2_approach);
+    finger_center_approach = (pos_finger1_approach + pos_finger2_approach) / 2;
+    bottle_center = tform2trvec(graspPose);
+    dist_approach = norm(finger_center_approach(1:2) - bottle_center(1:2));
+    fprintf('Approach stage: min XY distance (finger center - bottle center): %.6f m\n', dist_approach);
+
+    T_finger1_grasp = getTransform(robot, qGrasp, 'left_gripper_finger_link1');
+    T_finger2_grasp = getTransform(robot, qGrasp, 'left_gripper_finger_link2');
+    pos_finger1_grasp = tform2trvec(T_finger1_grasp);
+    pos_finger2_grasp = tform2trvec(T_finger2_grasp);
+    finger_center_grasp = (pos_finger1_grasp + pos_finger2_grasp) / 2;
+    dist_grasp = norm(finger_center_grasp(1:2) - bottle_center(1:2));
+    fprintf('Grasp stage: min XY distance (finger center - bottle center): %.6f m\n', dist_grasp);
 end
+
+% === End of main script ===
+
+% Plot final positions for summary visualization
+plotFinalPositions;
