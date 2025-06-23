@@ -14,11 +14,11 @@ This project provides a MATLAB-based workflow for simulating and planning graspi
 ## Setup
 1. Clone the repository and open it in MATLAB.
 2. Ensure all files are in the main project directory, with URDFs in `fineUrdfs/`.
-3. Run `loadRobotBottleTable.m` to generate the bottle and table objects.
+3. Run `createAndPlaceBottleTable.m` to generate the bottle and table objects.
 4. Run `simpleGIKprocess_R1BodyAndMug.m` to simulate the grasping process and visualize the results.
 
 ## Main Scripts
-- **`loadRobotBottleTable.m`**: 
+- **`createAndPlaceBottleTable.m`**: 
   - Loads the robot, samples the workspace, and creates the bottle and table.
   - Checks if the bottle's grasp pose is reachable. If not, moves the bottle to the closest feasible point and verifies with IK.
 - **`simpleGIKprocess_R1BodyAndMug.m`**:
