@@ -16,8 +16,8 @@ tableTopZ = bottlePosition(3);
 tableBottomZ = tableTopZ - tableTopThickness;
 
 % Cardbox
-cardboxLength = 0.12;
-cardboxWidth  = 0.12;
+cardboxLength = 0.2;
+cardboxWidth  = 0.2;
 cardboxHeight = 0.20;
 
 % --- Cardbox Placement ---
