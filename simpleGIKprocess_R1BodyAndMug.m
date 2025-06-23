@@ -25,6 +25,7 @@ graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
 load ('table.mat');
+load ('cardbox.mat');
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
 eeName = 'left_gripper_link';
 
@@ -51,6 +52,13 @@ jnt                  = rigidBodyJoint("tableFixed","fixed");
 tableBody.Joint = jnt;
 addCollision (tableBody, tableBox);
 addBody(robotB, tableBody, robotB.BaseName);  % fixed to world/base
+
+%% Add cardboard box as a fixed body for collision
+cardboxBody = rigidBody("cardboxObstacle");
+jntCard = rigidBodyJoint("cardboxFixed","fixed");
+cardboxBody.Joint = jntCard;
+addCollision(cardboxBody, cardbox);
+addBody(robotB, cardboxBody, robotB.BaseName);
 
 %% calculate eePosB
 % Calculate reachable workspace points for robotB
@@ -84,6 +92,14 @@ for k = 1:numel(linksToProtect)
                   linksToProtect{k}, ...
                   "ReferenceBody","tableObstacle", ...
                   "Bounds",    [clearance 10] ); % upper bound cannot be infinite, and use 10m an example
+end
+
+% Add distance constraint for the cardboard box
+for k = 1:numel(linksToProtect)
+    distCs{end+1} = constraintDistanceBounds( ...
+                  linksToProtect{k}, ...
+                  "ReferenceBody","cardboxObstacle", ...
+                  "Bounds",    [clearance 10] );
 end
 
 %%
@@ -340,6 +356,11 @@ fprintf('Y difference (finger center - bottle center): %.6f m\n', y_diff);
 % === Animate (Enhanced Visualization) ===
 animSpeed = 0.2; % Animation speed (seconds per frame)
 
+% --- Video export setup ---
+v = VideoWriter('robot_grasp_animation.mp4', 'MPEG-4');
+v.FrameRate = 1/animSpeed;
+open(v);
+
 figure('Name','R1 Arm Grasp Animation','Position',[100 100 1200 700]);
 ax = axes; view(45,30); axis equal; grid on; hold on;
 
@@ -350,6 +371,11 @@ if exist('tableBox','var')
     Yb = Yb(:) + tableBox.Pose(2,4);
     Zb = Zb(:) + tableBox.Pose(3,4);
     fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
+end
+
+% Draw cardboard box
+if exist('cardbox','var')
+    show(cardbox, 'Parent', ax);
 end
 
 % Draw bottle as transparent cylinder
@@ -408,8 +434,23 @@ for t = 1:nTotal
     if exist('tableBox','var')
         fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
     end
+    % Cardboard box
+    if exist('cardbox','var')
+        show(cardbox, 'Parent', ax);
+    end
     % Bottle
     surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
+    % Draw bottle top as a filled circle for top view
+    theta = linspace(0, 2*pi, 30);
+    bottle_top_x = pos_bottle(1) + bottle_radius * cos(theta);
+    bottle_top_y = pos_bottle(2) + bottle_radius * sin(theta);
+    bottle_top_z = pos_bottle(3) + bottle_height;
+    fill3(bottle_top_x, bottle_top_y, bottle_top_z*ones(size(bottle_top_x)), [0.2 0.5 1], 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    % Draw bottle bottom as a filled circle for top view
+    bottle_bottom_x = pos_bottle(1) + bottle_radius * cos(theta);
+    bottle_bottom_y = pos_bottle(2) + bottle_radius * sin(theta);
+    bottle_bottom_z = pos_bottle(3);
+    fill3(bottle_bottom_x, bottle_bottom_y, bottle_bottom_z*ones(size(bottle_bottom_x)), [0.2 0.5 1], 'FaceAlpha', 0.3, 'EdgeColor', 'none');
     % Trajectories
     plot3(gripper_traj(1:t,1),gripper_traj(1:t,2),gripper_traj(1:t,3),'r--','LineWidth',1.5);
     plot3(finger1_traj(1:t,1),finger1_traj(1:t,2),finger1_traj(1:t,3),'g-.','LineWidth',1);
@@ -435,7 +476,94 @@ for t = 1:nTotal
     xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
     axis equal; grid on;
     pause(animSpeed);
+    % --- Capture and write video frame ---
+    frame = getframe(gcf);
+    writeVideo(v, frame);
 end
+
+% --- Close video file ---
+close(v);
+disp('Video saved as robot_grasp_animation.mp4');
+
+% === Top-down view video export ===
+v2 = VideoWriter('robot_grasp_topview.mp4', 'MPEG-4');
+v2.FrameRate = 1/animSpeed;
+open(v2);
+
+figure('Name','R1 Arm Grasp Animation (Top View)','Position',[100 100 1200 700]);
+ax2 = axes; view(0,90); axis equal; grid on; hold on;
+
+% Draw table as semi-transparent box
+if exist('tableBox','var')
+    fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
+end
+% Draw cardboard box
+if exist('cardbox','var')
+    show(cardbox, 'Parent', ax2);
+end
+% Draw bottle as transparent cylinder
+surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
+plot3(pos_bottle(1),pos_bottle(2),pos_bottle(3)+bottle_height/2,'ko','MarkerSize',10,'MarkerFaceColor','y');
+
+for t = 1:nTotal
+    qNow = initialGuess;
+    for j = 1:numel(qNow)
+        qNow(j).JointPosition = traj(t,j);
+    end
+    cla(ax2);
+    % Table
+    if exist('tableBox','var')
+        fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
+    end
+    % Cardboard box
+    if exist('cardbox','var')
+        show(cardbox, 'Parent', ax2);
+    end
+    % Bottle
+    surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
+    % Draw bottle top as a filled circle for top view
+    theta = linspace(0, 2*pi, 30);
+    bottle_top_x = pos_bottle(1) + bottle_radius * cos(theta);
+    bottle_top_y = pos_bottle(2) + bottle_radius * sin(theta);
+    bottle_top_z = pos_bottle(3) + bottle_height;
+    fill3(bottle_top_x, bottle_top_y, bottle_top_z*ones(size(bottle_top_x)), [0.2 0.5 1], 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    % Draw bottle bottom as a filled circle for top view
+    bottle_bottom_x = pos_bottle(1) + bottle_radius * cos(theta);
+    bottle_bottom_y = pos_bottle(2) + bottle_radius * sin(theta);
+    bottle_bottom_z = pos_bottle(3);
+    fill3(bottle_bottom_x, bottle_bottom_y, bottle_bottom_z*ones(size(bottle_bottom_x)), [0.2 0.5 1], 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    % Trajectories
+    plot3(gripper_traj(1:t,1),gripper_traj(1:t,2),gripper_traj(1:t,3),'r--','LineWidth',1.5);
+    plot3(finger1_traj(1:t,1),finger1_traj(1:t,2),finger1_traj(1:t,3),'g-.','LineWidth',1);
+    plot3(finger2_traj(1:t,1),finger2_traj(1:t,2),finger2_traj(1:t,3),'g-.','LineWidth',1);
+    plot3(finger_center_traj(1:t,1),finger_center_traj(1:t,2),finger_center_traj(1:t,3),'b-','LineWidth',2);
+    % Robot
+    show(robotB, qNow, 'PreservePlot', false, 'Parent', ax2);
+    % Stage markers
+    if t==1
+        title('Stage 1: Approach (Top View)','FontSize',14,'Color','b');
+    elseif t==round(nTotal/2)
+        title('Stage 2: Grasp (Top View)','FontSize',14,'Color','m');
+    elseif t==nTotal
+        title('Stage 3: Close (Top View)','FontSize',14,'Color','r');
+    end
+    % Finger center to bottle center line
+    plot3([finger_center_traj(t,1) pos_bottle(1)], [finger_center_traj(t,2) pos_bottle(2)], [finger_center_traj(t,3) pos_bottle(3)], 'k:', 'LineWidth', 2);
+    % Real-time metrics
+    txt = sprintf('X diff: %.3f m\nY diff: %.3f m', x_diff_traj(t), y_diff_traj(t));
+    text(finger_center_traj(t,1), finger_center_traj(t,2), finger_center_traj(t,3)+0.05, txt, 'FontSize', 10, 'Color', 'k');
+    % Camera preset (top-down)
+    view(0,90);
+    xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
+    axis equal; grid on;
+    pause(animSpeed);
+    % --- Capture and write video frame ---
+    frame2 = getframe(gcf);
+    writeVideo(v2, frame2);
+end
+
+close(v2);
+disp('Top-down video saved as robot_grasp_topview.mp4');
 
 % Save final configuration for visualization
 save('final_configuration.mat', 'qClose', 'bottleInB', 'tableBox');

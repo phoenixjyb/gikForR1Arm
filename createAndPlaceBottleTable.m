@@ -1,6 +1,4 @@
 %% create a bottle so that robot can reach
-addpath(fullfile(pwd, 'backupFiles'));
-addpath(fullfile(pwd, 'backupFiles', 'reachableWorkspace'));
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf'); % Use full-body URDF for consistency
 robotB.DataFormat = 'struct';
 robotB.Gravity = [0 0 -9.81];
