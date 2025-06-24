@@ -185,3 +185,7 @@ function isContained = isBoxContained(innerBox, outerBox)
                    abs(innerInOuter(3,:)) <= outerBox.Z/2 + 1e-8);
     isContained = isInside;
 end
+
+ss = manipulatorStateSpace(robot);
+sv = manipulatorCollisionBodyValidator(ss);
+sv.ValidationDistance = 0.01;

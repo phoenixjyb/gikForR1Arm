@@ -228,16 +228,16 @@ if isReachable
     
     % === Motion Planning with manipulatorRRT (collision-free path) ===
     robotB.DataFormat = 'row'; % Switch to row format for planner
-    ss = manipulatorStateSpace(robotB);
-    sv = manipulatorCollisionBodyValidator(ss);
-    sv.ValidationDistance = 0.01;
-    sv.Environment = {tableBox, cardbox, bottleInB.collision}; % Add the bottle as an obstacle for approach
-    planner = manipulatorRRT(ss, sv);
+    obstacles = {tableBox, cardbox, bottleInB.collision};
+    planner = manipulatorRRT(robotB, obstacles);
     planner.MaxConnectionDistance = 0.1;
     planner.MaxIterations = 3000;
 
     qStart = [initialGuess.JointPosition];
     qGoal = [qGrasp.JointPosition];
+    disp(class(robotB)); % Should print 'rigidBodyTree'
+    keyboard
+    collidingPairs = tempCheckSelfCollision(robotB, qStart);
     [pathObj, solnInfo] = plan(planner, qStart, qGoal);
 
     robotB.DataFormat = 'struct'; % Restore struct format after planning
