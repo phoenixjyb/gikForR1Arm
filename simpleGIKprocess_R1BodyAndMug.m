@@ -28,6 +28,7 @@ graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
+robotB = attachLeftArmCollisionBoxes(robotB, 'R1Meshes');
 eeName = 'left_gripper_link';
 
 % Arm initial position reference
@@ -68,6 +69,9 @@ addBody(robotB, cardboxBody, robotB.BaseName);
 %% visualize robot, bottle, and the table
 % Call visualization function
 % visualizeRobotScene(robotB, bottleInB, tableBox, eePosBs);
+
+%% After robotB, tableBox, cardbox, and bottleInB are set up
+visualizeRobotSceneWithCollisions(robotB, tableBox, cardbox, bottleInB);
 
 %% 2.  Create a distance-bounds constraint
 clearance = 0.02; % 2 cm gap
