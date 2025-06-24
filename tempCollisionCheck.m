@@ -27,6 +27,53 @@ cb_base = collisionBox(0.2, 0.2, 0.1);
 addCollision(robot.Base, cb_base, trvec2tform([0, 0, 0.05]));
 collisionMap(robot.BaseName) = cb_base;
 
+% --- Add collision boxes to all left arm links using STL bounding boxes ---
+leftArmLinks = {'left_arm_base_link', 'left_arm_link1', 'left_arm_link2', ...
+                'left_arm_link3', 'left_arm_link4', 'left_arm_link5', ...
+                'left_arm_link6', 'left_gripper_link', ...
+                'left_gripper_finger_link1', 'left_gripper_finger_link2'};
+
+for i = 1:numel(leftArmLinks)
+    linkName = leftArmLinks{i};
+    stlFile = fullfile('R1Meshes', [linkName, '.STL']);
+    if exist(stlFile, 'file')
+        try
+            [~, vertices] = stlread(stlFile);
+            if ~isnumeric(vertices) || size(vertices,2) ~= 3
+                % Try triangulation object
+                TR = stlread(stlFile);
+                vertices = TR.Points;
+            end
+        catch
+            error(['Failed to read vertices from STL file: ', stlFile]);
+        end
+        minV = min(vertices, [], 1);
+        maxV = max(vertices, [], 1);
+        boxSize = maxV - minV;
+        boxCenter = (minV + maxV) / 2;
+        disp('boxCenter:');
+        disp(boxCenter);
+        disp('size(boxCenter):');
+        disp(size(boxCenter));
+        cb = collisionBox(boxSize(1), boxSize(2), boxSize(3));
+        cb.Pose = trvec2tform(reshape(boxCenter, 1, 3));
+        bodyNames = cellfun(@(b) b.Name, robot.Bodies, 'UniformOutput', false);
+        idx = find(strcmp(bodyNames, linkName));
+        if ~isempty(idx)
+            oldBody = robot.Bodies{idx};
+            newBody = rigidBody(oldBody.Name);
+            newBody.Joint = oldBody.Joint;
+            addCollision(newBody, cb, eye(4)); % Pose is already set in cb
+            replaceBody(robot, newBody.Name, newBody);
+            disp(['Added collision box to ', linkName]);
+        else
+            warning([linkName, ' not found in robot model!']);
+        end
+    else
+        warning(['STL file not found for ', linkName, ': ', stlFile]);
+    end
+end
+
 % 3. Set robot to home configuration
 q = homeConfiguration(robot); % returns a row vector
 
