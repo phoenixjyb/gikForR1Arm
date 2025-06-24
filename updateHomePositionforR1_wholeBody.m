@@ -1,6 +1,10 @@
-function updatedHomePos = updateHomePositionforR1_wholeBody(loadedHomePos)
+function updatedHomePos = updateHomePositionforR1_wholeBody(robot, qRow)
+% Update home position for R1 whole body, row vector version
+%   robot: rigidBodyTree (with DataFormat 'row')
+%   qRow: 1xN row vector of joint positions
+%   updatedHomePos: 1xN row vector with updated joint positions
 
-updatedHomePos = loadedHomePos;
+updatedHomePos = qRow;
 
 % Define left arm values in radians
 leftArmVals = [1.56,    % joint1
@@ -21,30 +25,29 @@ rightArmVals = [-1.56,  % joint1
 % Define arm joint names
 leftArmJoints = {'left_arm_joint1', 'left_arm_joint2', 'left_arm_joint3', ...
                  'left_arm_joint4', 'left_arm_joint5', 'left_arm_joint6'};
-             
 rightArmJoints = {'right_arm_joint1', 'right_arm_joint2', 'right_arm_joint3', ...
                   'right_arm_joint4', 'right_arm_joint5', 'right_arm_joint6'};
 
-% Copy input configuration
-updatedHomePos = loadedHomePos;
+% Save current DataFormat
+oldFormat = robot.DataFormat;
+robot.DataFormat = 'struct';
+jointStruct = homeConfiguration(robot);
+jointNames = {jointStruct.JointName};
+robot.DataFormat = oldFormat; % Restore original format
 
 % Update left arm joints
 for i = 1:length(leftArmJoints)
-    for j = 1:length(updatedHomePos)
-        if strcmp(updatedHomePos(j).JointName, leftArmJoints{i})
-            updatedHomePos(j).JointPosition = leftArmVals(i);
-            break;
-        end
+    idx = find(strcmp(jointNames, leftArmJoints{i}), 1);
+    if ~isempty(idx)
+        updatedHomePos(idx).JointPosition = leftArmVals(i);
     end
 end
 
 % Update right arm joints
 for i = 1:length(rightArmJoints)
-    for j = 1:length(updatedHomePos)
-        if strcmp(updatedHomePos(j).JointName, rightArmJoints{i})
-            updatedHomePos(j).JointPosition = rightArmVals(i);
-            break;
-        end
+    idx = find(strcmp(jointNames, rightArmJoints{i}), 1);
+    if ~isempty(idx)
+        updatedHomePos(idx).JointPosition = rightArmVals(i);
     end
 end
 

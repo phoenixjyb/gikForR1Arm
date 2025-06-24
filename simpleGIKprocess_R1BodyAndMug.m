@@ -27,8 +27,10 @@ bottleInB.collision.Pose = bottleInB.pose;
 graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
+% Set robotB to struct format for all configuration handling
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
 robotB = attachLeftArmCollisionBoxes(robotB, 'R1Meshes');
+robotB.DataFormat = 'struct';
 eeName = 'left_gripper_link';
 
 % Arm initial position reference
@@ -37,7 +39,7 @@ eeName = 'left_gripper_link';
 
 % === Define Initial Robot Configuration ===
 initialGuess = homeConfiguration(robotB);
-initialGuess = updateHomePositionforR1_wholeBody(initialGuess);
+initialGuess = updateHomePositionforR1_wholeBody(robotB, initialGuess);
 
 % Ensure finger joints start in open position
 fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
@@ -77,6 +79,8 @@ visualizeRobotSceneWithCollisions(robotB, tableBox, cardbox, bottleInB);
 clearance = 0.02; % 2 cm gap
 linksToProtect = { ...
     "left_gripper_link", ...
+    "left_gripper_finger_link1", ...
+    "left_gripper_finger_link2", ...
     "left_arm_link6", ...
     "left_arm_link5", ...
     "left_arm_link4", ...
@@ -221,6 +225,37 @@ if isReachable
     % Solve GIK with torso and right arm locked
     bottleDiameter = bottleInB.collision.Radius * 2;
     [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointTgt_stages12, bottleDiameter);
+    
+    % === Motion Planning with manipulatorRRT (collision-free path) ===
+    robotB.DataFormat = 'row'; % Switch to row format for planner
+    ss = manipulatorStateSpace(robotB);
+    sv = manipulatorCollisionBodyValidator(ss);
+    sv.ValidationDistance = 0.01;
+    sv.Environment = {tableBox, cardbox, bottleInB.collision}; % Add the bottle as an obstacle for approach
+    planner = manipulatorRRT(ss, sv);
+    planner.MaxConnectionDistance = 0.1;
+    planner.MaxIterations = 3000;
+
+    qStart = [initialGuess.JointPosition];
+    qGoal = [qGrasp.JointPosition];
+    [pathObj, solnInfo] = plan(planner, qStart, qGoal);
+
+    robotB.DataFormat = 'struct'; % Restore struct format after planning
+
+    if isempty(pathObj.States)
+        warning('No collision-free path found by the planner (with bottle as obstacle).');
+    else
+        disp('Collision-free path found by manipulatorRRT (with bottle as obstacle). Visualizing...');
+        figure; hold on; axis equal; grid on;
+        show(tableBox);
+        show(cardbox);
+        show(bottleInB.collision);
+        for i = 1:size(pathObj.States,1)
+            show(robotB, pathObj.States(i,:), 'PreservePlot', false, 'Collisions', 'on');
+            drawnow;
+        end
+        title('Planned Collision-Free Path (Approach, Bottle as Obstacle)');
+    end
     
 else
     disp('GIK Check FAILED: Grasp pose is unreachable with fixed torso.  ▶  Stage 2: torso adjustment');
