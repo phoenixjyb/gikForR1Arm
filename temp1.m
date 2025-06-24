@@ -6,17 +6,25 @@ body = rigidBody('test_link');
 jnt = rigidBodyJoint('test_joint','fixed');
 body.Joint = jnt;
 
-% Add a collision box to the body
-addCollision(body, collisionBox(0.1, 0.1, 0.1));
-
 % Add the body to the robot
 addBody(robotTest, body, robotTest.BaseName);
 
-% Display the Collisions property
-disp('Collisions for test_link:');
-disp(body.Collisions);
+% Create a collision object
+cb = collisionBox(0.1, 0.1, 0.1);
 
-% Check the class of the first collision object
-if ~isempty(body.Collisions)
-    disp(['Collision object class: ', class(body.Collisions{1})]);
-end
+% Store the collision object in a map, keyed by body name
+collisionMap = containers.Map;
+collisionMap('test_link') = cb;
+
+% Show the robot and the collision object together
+ax = show(robotTest);
+hold(ax, 'on');
+show(cb, "Parent", ax, "Pose", trvec2tform([0 0 0])); % Adjust pose as needed
+hold(ax, 'off');
+
+% Access and manipulate the collision object later
+myCollisionObj = collisionMap('test_link');
+disp(myCollisionObj);
+
+class(cb)
+methods(cb)
