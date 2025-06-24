@@ -1,7 +1,10 @@
 close all
 
 % === Setup ===
-load ("bottle.mat") % this bottle.mat is created by createBottle.m file
+% Ensure you have run createAndPlaceBottleTable.m first to generate bottle, table, and cardbox objects
+load('bottle.mat'); % bottleInB created by createAndPlaceBottleTable.m
+load('table.mat');  % tableBox created by createAndPlaceBottleTable.m
+load('cardbox.mat'); % cardbox created by createAndPlaceBottleTable.m
 % tweak the bottle pose to be grasped by the left arm
 
 
@@ -24,8 +27,6 @@ bottleInB.collision.Pose = bottleInB.pose;
 graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
-load ('table.mat');
-load ('cardbox.mat');
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
 eeName = 'left_gripper_link';
 
@@ -398,10 +399,33 @@ finger_center_traj = zeros(nTotal,3);
 x_diff_traj = zeros(nTotal,1);
 y_diff_traj = zeros(nTotal,1);
 
+% Ensure DataFormat is 'row' for collision checking
+robotB.DataFormat = 'row';
+qInitVec = homeConfiguration(robotB); % returns a vector in 'row' format
+% --- Use single output for attached obstacles (table/cardbox as rigid bodies) ---
+inCollision = checkCollision(robotB, qInitVec, 'Exhaustive', 'on');
+if inCollision
+    disp('Initial configuration is in collision.');
+else
+    disp('Initial configuration is collision-free.');
+end
+figure; hold on; axis equal; grid on;
+show(robotB, qInitVec, 'PreservePlot', false);
+show(cardbox);
+show(tableBox);
+title('Initial Robot Configuration with Obstacles');
+
 for t = 1:nTotal
     qNow = initialGuess;
     for j = 1:numel(qNow)
         qNow(j).JointPosition = traj(t,j);
+    end
+    qVec = [qNow.JointPosition];
+    % --- Use single output for external objects (cardbox, tableBox) ---
+    inCollision = checkCollision(robotB, qVec, {cardbox, tableBox});
+    if inCollision
+        warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
+        keyboard
     end
     T_gripper = getTransform(robotB, qNow, 'left_gripper_link');
     T_finger1 = getTransform(robotB, qNow, 'left_gripper_finger_link1');
@@ -428,6 +452,13 @@ for t = 1:nTotal
     qNow = initialGuess;
     for j = 1:numel(qNow)
         qNow(j).JointPosition = traj(t,j);
+    end
+    qVec = [qNow.JointPosition];
+    % --- Use single output for external objects (cardbox, tableBox) ---
+    inCollision = checkCollision(robotB, qVec, {cardbox, tableBox});
+    if inCollision
+        warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
+        break;
     end
     cla(ax);
     % Table
@@ -509,6 +540,13 @@ for t = 1:nTotal
     qNow = initialGuess;
     for j = 1:numel(qNow)
         qNow(j).JointPosition = traj(t,j);
+    end
+    qVec = [qNow.JointPosition];
+    % --- Use single output for external objects (cardbox, tableBox) ---
+    inCollision = checkCollision(robotB, qVec, {cardbox, tableBox});
+    if inCollision
+        warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
+        break;
     end
     cla(ax2);
     % Table
