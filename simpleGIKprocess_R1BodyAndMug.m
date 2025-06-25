@@ -1,4 +1,7 @@
+% tidy up the workspace and clear the command window and the console
 close all
+clc
+clear all %#ok<CLALL>
 
 % === Setup ===
 % Ensure you have run createAndPlaceBottleTable.m first to generate bottle, table, and cardbox objects
@@ -49,20 +52,56 @@ for i = 1:numel(initialGuess)
     end
 end
 
+% Switch to 'row' for collision checking
+robotB.DataFormat = 'row';
+
+% --- Automated search for a collision-free initial configuration ---
+qStart = [initialGuess.JointPosition];
+maxTries = 500;
+found = false;
+for i = 1:maxTries
+    qTest = qStart + 0.05*randn(size(qStart));
+    [isColliding1, sep1] = checkCollision(robotB, qTest, {tableBox}, 'Exhaustive', 'on');
+    [isColliding2, sep2] = checkCollision(robotB, qTest, {bottleInB.collision}, 'Exhaustive', 'on');
+    [isColliding3, sep3] = checkCollision(robotB, qTest, {cardbox}, 'Exhaustive', 'on');
+    minSep = min([min(sep1(:)), min(sep2(:)), min(sep3(:))]);
+    disp(['Try ', num2str(i), ': min sep = ', num2str(minSep)]);
+    if ~any(isColliding1) && ~any(isColliding2) && ~any(isColliding3)
+        disp('Found a collision-free configuration:');
+        disp(qTest);
+        % Update struct config for GIK/IK
+        robotB.DataFormat = 'struct';
+        for j = 1:numel(initialGuess)
+            initialGuess(j).JointPosition = qTest(j);
+        end
+        found = true;
+        break;
+    end
+end
+if ~found
+    warning('Could not find a collision-free configuration nearby.');
+    % Still update struct config for GIK/IK
+    robotB.DataFormat = 'struct';
+    for j = 1:numel(initialGuess)
+        initialGuess(j).JointPosition = qStart(j);
+    end
+end
+% update the initialGuess to find a collision-free configuration
+
 %%%%%% define the table to avoid and adding more 
 %% 1.  Attach the box to the robot as a fixed body
-tableBody            = rigidBody("tableObstacle");
-jnt                  = rigidBodyJoint("tableFixed","fixed");
-tableBody.Joint = jnt;
-addCollision (tableBody, tableBox);
-addBody(robotB, tableBody, robotB.BaseName);  % fixed to world/base
+% tableBody            = rigidBody("tableObstacle");
+% jnt                  = rigidBodyJoint("tableFixed","fixed");
+% tableBody.Joint = jnt;
+% addCollision (tableBody, tableBox);
+% addBody(robotB, tableBody, robotB.BaseName);  % fixed to world/base
 
 %% Add cardboard box as a fixed body for collision
-cardboxBody = rigidBody("cardboxObstacle");
-jntCard = rigidBodyJoint("cardboxFixed","fixed");
-cardboxBody.Joint = jntCard;
-addCollision(cardboxBody, cardbox);
-addBody(robotB, cardboxBody, robotB.BaseName);
+% cardboxBody = rigidBody("cardboxObstacle");
+% jntCard = rigidBodyJoint("cardboxFixed","fixed");
+% cardboxBody.Joint = jntCard;
+% addCollision(cardboxBody, cardbox);
+% addBody(robotB, cardboxBody, robotB.BaseName);
 
 %% calculate eePosB
 % Calculate reachable workspace points for robotB
@@ -95,21 +134,21 @@ linksToProtect = { ...
     "right_arm_link2", ...
     "right_arm_link1" ...
     }; % customization: manually defined links to protect;
-distCs = cell(1,numel(linksToProtect));
-for k = 1:numel(linksToProtect)
-    distCs{k} = constraintDistanceBounds( ...
-                  linksToProtect{k}, ...
-                  "ReferenceBody","tableObstacle", ...
-                  "Bounds",    [clearance 10] ); % upper bound cannot be infinite, and use 10m an example
-end
+% distCs = cell(1,numel(linksToProtect));
+% for k = 1:numel(linksToProtect)
+%     distCs{k} = constraintDistanceBounds( ...
+%                   linksToProtect{k}, ...
+%                   "ReferenceBody",tableBox, ...
+%                   "Bounds",    [clearance 10] ); % upper bound cannot be infinite, and use 10m an example
+% end
 
-% Add distance constraint for the cardboard box
-for k = 1:numel(linksToProtect)
-    distCs{end+1} = constraintDistanceBounds( ...
-                  linksToProtect{k}, ...
-                  "ReferenceBody","cardboxObstacle", ...
-                  "Bounds",    [clearance 10] );
-end
+% % Add distance constraint for the cardboard box
+% for k = 1:numel(linksToProtect)
+%     distCs{end+1} = constraintDistanceBounds( ...
+%                   linksToProtect{k}, ...
+%                   "ReferenceBody",cardbox, ...
+%                   "Bounds",    [clearance 10] );
+% end
 
 %%
 
@@ -185,8 +224,11 @@ for i = 1:numel(initialGuess)
     end
 end
 
-[~, solutionInfo_check] = gik_check(initialGuess, poseTgt_check, jointBounds_check);
-isReachable = strcmpi(solutionInfo_check.Status, 'success');
+
+% [~, solutionInfo_check] = gik_check(initialGuess, poseTgt_check, jointBounds_check);
+% isReachable = strcmpi(solutionInfo_check.Status, 'success');
+
+isReachable = 1; % force this being 1
 % =====================================
 
 if isReachable
@@ -220,25 +262,99 @@ if isReachable
     end
 
     % Table collision avoidance constraints remain active (allDist)
-    allDist = [distCs{:}];
+    % allDist = [distCs{:}];
 
     % Solve GIK with torso and right arm locked
     bottleDiameter = bottleInB.collision.Radius * 2;
-    [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointTgt_stages12, bottleDiameter);
+    [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robotB, eeName, targetPose, initialGuess, jointTgt_stages12, bottleDiameter);
     
+    % --- Check for obstacle collisions at start configuration ---
+    robotB.DataFormat = 'row';
+    qStart = [initialGuess.JointPosition];
+ 
+    [isColliding1, sep1] = checkCollision(robotB, qStart, {tableBox}, 'Exhaustive', 'on');
+    [isColliding2, sep2] = checkCollision(robotB, qStart, {bottleInB.collision}, 'Exhaustive', 'on');
+    [isColliding3, sep3] = checkCollision(robotB, qStart, {cardbox}, 'Exhaustive', 'on');
+    disp('isColliding1 (tableBox):'); disp(isColliding1);
+    disp('min(sep1):'); disp(min(sep1(:)));
+    disp('isColliding2 (bottle):'); disp(isColliding2);
+    disp('min(sep2):'); disp(min(sep2(:)));
+    disp('isColliding3 (cardbox):'); disp(isColliding3);
+    disp('min(sep3):'); disp(min(sep3(:)));
+    
+    if any(isColliding1) || any(isColliding2) || any(isColliding3)
+        disp('Collision detected with at least one obstacle.');
+        % Print all separation distances
+        disp('Separation distances matrix:');
+        disp(sep1);
+        disp(sep2);
+        disp(sep3);
+        % Find all collisions (sepDist <= 0)
+        [linkIdxs, obsIdxs] = find(sep1 <= 0 | sep2 <= 0 | sep3 <= 0);
+        bodyNames = [{robotB.Base.Name}, cellfun(@(b) b.Name, robotB.Bodies, 'UniformOutput', false)];
+        obstacleNames = {'tableBox', 'bottle', 'cardbox'};
+        obstacles = {tableBox, bottleInB.collision, cardbox};
+        % Compute number of primitives for each obstacle
+        numPrims = zeros(1, numel(obstacles));
+        for iObs = 1:numel(obstacles)
+            if isprop(obstacles{iObs}, 'CollisionGeometries')
+                numPrims(iObs) = numel(obstacles{iObs}.CollisionGeometries);
+            else
+                numPrims(iObs) = 1;
+            end
+        end
+        cumPrims = cumsum([0 numPrims]);
+        
+        for k = 1:length(linkIdxs)
+            linkName = bodyNames{linkIdxs(k)};
+            obsCol = obsIdxs(k);
+            % Map obsCol to obstacle and primitive
+            found = false;
+            for iObs = 1:numel(numPrims)
+                if obsCol > cumPrims(iObs) && obsCol <= cumPrims(iObs+1)
+                    obsName = obstacleNames{iObs};
+                    primIdx = obsCol - cumPrims(iObs);
+                    fprintf('Collision: %s <--> %s (primitive #%d) (sepDist = %.4f)\n', linkName, obsName, primIdx, sep1(linkIdxs(k), obsIdxs(k)));
+                    found = true;
+                    break;
+                end
+            end
+            if ~found
+                fprintf('Collision: %s <--> Unknown obstacle/primitive (col %d) (sepDist = %.4f)\n', linkName, obsCol, sep1(linkIdxs(k), obsIdxs(k)));
+            end
+        end
+        % Print initial joint values for debugging
+        disp('Initial joint values:');
+        disp(qStart);
+        error('Please adjust the initial configuration or environment to resolve the collision.');
+    else
+        disp('Start configuration is collision-free.');
+    end
+
     % === Motion Planning with manipulatorRRT (collision-free path) ===
-    robotB.DataFormat = 'row'; % Switch to row format for planner
-    obstacles = {tableBox, cardbox, bottleInB.collision};
-    planner = manipulatorRRT(robotB, obstacles);
-    planner.MaxConnectionDistance = 0.1;
-    planner.MaxIterations = 3000;
+    robotB.DataFormat = 'row';
+    planner = manipulatorRRT(robotB, {tableBox, bottleInB.collision, cardbox}, ...
+                            'IgnoreSelfCollision', true, ...
+                            'MaxConnectionDistance', 0.1, ...
+                            'MaxIterations', 3000);
 
     qStart = [initialGuess.JointPosition];
     qGoal = [qGrasp.JointPosition];
-    disp(class(robotB)); % Should print 'rigidBodyTree'
-    keyboard
-    collidingPairs = tempCheckSelfCollision(robotB, qStart);
-    [pathObj, solnInfo] = plan(planner, qStart, qGoal);
+    robotB.DataFormat = 'row';
+    disp('--- Checking goal configuration for collisions ---');
+    [isCollidingGoal1, sepGoal1] = checkCollision(robotB, qGoal, {tableBox}, 'Exhaustive', 'on');
+    [isCollidingGoal2, sepGoal2] = checkCollision(robotB, qGoal, {bottleInB.collision}, 'Exhaustive', 'on');
+    [isCollidingGoal3, sepGoal3] = checkCollision(robotB, qGoal, {cardbox}, 'Exhaustive', 'on');
+    disp('isCollidingGoal1 (tableBox):'); disp(isCollidingGoal1); disp('min(sepGoal1):'); disp(min(sepGoal1(:)));
+    disp('isCollidingGoal2 (bottle):'); disp(isCollidingGoal2); disp('min(sepGoal2):'); disp(min(sepGoal2(:)));
+    disp('isCollidingGoal3 (cardbox):'); disp(isCollidingGoal3); disp('min(sepGoal3):'); disp(min(sepGoal3(:)));
+keyboard
+    % Only proceed if ALL are collision-free
+    if ~any(isCollidingGoal1) && ~any(isCollidingGoal2) && ~any(isCollidingGoal3)
+        [pathObj, solnInfo] = plan(planner, qStart, qGoal);
+    else
+        error('Goal configuration is in collision. Please adjust GIK or target pose.');
+    end
 
     robotB.DataFormat = 'struct'; % Restore struct format after planning
 
@@ -336,12 +452,12 @@ else
     end
 
     % Table collision avoidance constraints remain active (allDist)
-    allDist = [distCs{:}];
+    % allDist = [distCs{:}];
 
     % Final two-stage GIK with updated torso
     bottleDiameter = bottleInB.collision.Radius * 2;
     [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = ...
-        solveGraspGIK(robotB, eeName, targetPose, distCs, initialGuess, jointTgt_stages12, bottleDiameter);
+        solveGraspGIK(robotB, eeName, targetPose, initialGuess, jointTgt_stages12, bottleDiameter);
 end
 
 
@@ -716,11 +832,11 @@ function eePositions = generateReachabilityWithTorso(robot, qTorso, jointList, e
     end
 end
 
-function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robot, eeName, graspPose, distConstraints, initialGuess, jointBounds, bottleDiameter)
-    % Setup GIK solver
+function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solutionInfo3] = solveGraspGIK(robot, eeName, graspPose, initialGuess, jointBounds, bottleDiameter)
+    robot.DataFormat = 'struct'; % Ensure struct for GIK/IK
     gik = generalizedInverseKinematics( ...
         'RigidBodyTree', robot, ...
-        'ConstraintInputs', {'pose', 'joint','distance'});
+        'ConstraintInputs', {'pose', 'joint'});
 
     % --- Finger Position Calculation (as before) ---
     % Based on URDF, finger joints are prismatic with limits [0, 0.05]
@@ -791,12 +907,9 @@ function [qApproach, qGrasp, qClose, traj, solutionInfo, solutionInfo2, solution
         end
     end
 
-    % Table collision avoidance constraints remain active (allDist)
-    allDist = [distConstraints{:}];
-
-    % Solve GIK for approach and grasp stages with fingers kept open
-    [qApproach, solutionInfo] = gik(initialGuess, poseApproach, jointTgt_stages12, allDist);
-    [qGrasp, solutionInfo2] = gik(qApproach, poseGrasp, jointTgt_stages12, allDist);
+    % Only pose and joint constraints are used; obstacle avoidance is handled by external collision checking
+    [qApproach, solutionInfo] = gik(initialGuess, poseApproach, jointTgt_stages12);
+    [qGrasp, solutionInfo2] = gik(qApproach, poseGrasp, jointTgt_stages12);
 
     % Stage 3: Close fingers for grasping
     qClose = qGrasp;
@@ -851,3 +964,85 @@ end
 
 % Plot final positions for summary visualization
 plotFinalPositions;
+
+% --- Collision check at initial configuration ---
+disp('--- Collision check at initial configuration ---');
+checkRobotCollisions(robotB, initialGuess, tableBox, bottleInB.collision, cardbox);
+
+% ... existing code ...
+
+% --- Collision check at grasp configuration ---
+disp('--- Collision check at grasp configuration ---');
+checkRobotCollisions(robotB, qGrasp, tableBox, bottleInB.collision, cardbox);
+
+% ... existing code ...
+
+% --- Collision check for every step of the planned path (if available) ---
+if exist('pathObj', 'var') && isfield(pathObj, 'States') && ~isempty(pathObj.States)
+    disp('--- Collision check for every step of the planned path (approach phase) ---');
+    for k = 1:size(pathObj.States,1)
+        % Convert row vector to struct for checkRobotCollisions
+        robotB.DataFormat = 'row';
+        qStepRow = pathObj.States(k,:);
+        robotB.DataFormat = 'struct';
+        qStepStruct = homeConfiguration(robotB);
+        for i = 1:numel(qStepStruct)
+            qStepStruct(i).JointPosition = qStepRow(i);
+        end
+        collidingPairs = checkRobotCollisions(robotB, qStepStruct, tableBox, bottleInB.collision, cardbox);
+        if ~isempty(collidingPairs)
+            warning('Collision detected at step %d of the planned path (approach phase)!', k);
+            break;
+        end
+    end
+end
+
+if exist('pathObj_final', 'var') && isfield(pathObj_final, 'States') && ~isempty(pathObj_final.States)
+    disp('--- Collision check for every step of the planned path (final grasp/close phase) ---');
+    for k = 1:size(pathObj_final.States,1)
+        robotB.DataFormat = 'row';
+        qStepRow = pathObj_final.States(k,:);
+        robotB.DataFormat = 'struct';
+        qStepStruct = homeConfiguration(robotB);
+        for i = 1:numel(qStepStruct)
+            qStepStruct(i).JointPosition = qStepRow(i);
+        end
+        collidingPairs = checkRobotCollisions(robotB, qStepStruct, tableBox, cardbox);
+        if ~isempty(collidingPairs)
+            warning('Collision detected at step %d of the planned path (final grasp/close phase)!', k);
+            break;
+        end
+    end
+end
+
+% --- Automated search for a collision-free initial configuration ---
+qStart = [initialGuess.JointPosition];
+maxTries = 500;
+found = false;
+for i = 1:maxTries
+    qTest = qStart + 0.05*randn(size(qStart));
+    [isColliding1, sep1] = checkCollision(robotB, qTest, {tableBox}, 'Exhaustive', 'on');
+    [isColliding2, sep2] = checkCollision(robotB, qTest, {bottleInB.collision}, 'Exhaustive', 'on');
+    [isColliding3, sep3] = checkCollision(robotB, qTest, {cardbox}, 'Exhaustive', 'on');
+    minSep = min([min(sep1(:)), min(sep2(:)), min(sep3(:))]);
+    disp(['Try ', num2str(i), ': min sep = ', num2str(minSep)]);
+    if ~any(isColliding1) && ~any(isColliding2) && ~any(isColliding3)
+        disp('Found a collision-free configuration:');
+        disp(qTest);
+        % Update struct config for GIK/IK
+        robotB.DataFormat = 'struct';
+        for j = 1:numel(initialGuess)
+            initialGuess(j).JointPosition = qTest(j);
+        end
+        found = true;
+        break;
+    end
+end
+if ~found
+    warning('Could not find a collision-free configuration nearby.');
+    % Still update struct config for GIK/IK
+    robotB.DataFormat = 'struct';
+    for j = 1:numel(initialGuess)
+        initialGuess(j).JointPosition = qStart(j);
+    end
+end

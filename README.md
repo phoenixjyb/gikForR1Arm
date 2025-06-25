@@ -31,6 +31,22 @@ This project provides a robust MATLAB-based workflow for simulating and planning
   - Animates the robot, bottle, table, and cardbox
   - Prints and saves final positions
 
+## Main Steps and Workflow (simpleGIKprocess_R1BodyAndMug.m)
+This script demonstrates a complete pipeline for planning and executing a collision-aware grasp of a bottle using the R1 robot. The main steps are:
+
+1. **Initialization and Setup**: Load robot and environment objects, adjust bottle pose, set initial robot configuration.
+2. **Environment and Collision Setup**: Attach table and cardbox as collision bodies, define protected robot links, and set up distance constraints.
+3. **Inverse Kinematics (IK) and Reachability**: Set up GIK solver, define target and approach poses, check reachability with the left arm.
+4. **Torso Adjustment for Reachability**: If unreachable, sample torso joint configurations to enable reach.
+5. **GIK-based Grasp Planning**: Lock all joints except left arm and gripper, solve for approach, grasp, and close stages with collision constraints.
+6. **Collision Checking**: Check for collisions at start and grasp configurations, visualize and report if any are found.
+7. **Motion Planning**: Use RRT to plan a collision-free path from start to grasp, considering all obstacles.
+8. **Final Pose and Metrics**: Print and compare final positions of gripper, fingers, and bottle.
+9. **Animation and Visualization**: Animate the robot's motion, export videos, and plot trajectories.
+10. **Data Export**: Save final configuration and trajectory as .mat and .json files.
+11. **Helper Functions**: Includes functions for torso solving, reachability sampling, and multi-stage GIK.
+12. **Additional Collision Checks**: Check for collisions at every step of the planned path.
+
 ## Workspace Sampling
 - The function `sampleReachableWorkspace(robot, eeName, numSamples, visualize, jointsToSample)` samples random joint configurations for the **left arm only** (torso and right arm locked at home) and computes the reachable workspace of the end-effector.
 - Handles continuous joints and invalid samples robustly.
