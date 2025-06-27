@@ -62,6 +62,13 @@ This script demonstrates a complete pipeline for planning and executing a collis
 - Ensure all required files (URDFs, helper functions) are in the correct locations.
 - For custom objects or new robots, update the relevant scripts and URDF paths.
 
+## Troubleshooting Collision Checking
+
+- **Self-collision or collision check failures:**
+  - Always check the size and placement of collision primitives (boxes/cylinders) first.
+  - Overlapping primitives can cause self-collision checks to fail, even if the robot's actual geometry is not in collision.
+  - Adjust primitive sizes and positions to avoid unnecessary overlap, especially at joints or between adjacent links.
+
 ## Extending the Project
 - You can adapt the workflow for other objects by updating the creation and placement logic in `generateBottleAndTable.m`.
 - The workspace sampling function can be used for any robot and end-effector by specifying the joints to sample.

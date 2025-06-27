@@ -32,7 +32,7 @@ bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
 % Set robotB to struct format for all configuration handling
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
-robotB = attachLeftArmCollisionBoxes(robotB, 'R1Meshes');
+robotB = attachLeftArmCollisionPrimitives(robotB, 'R1Meshes', 'box');
 robotB.DataFormat = 'struct';
 eeName = 'left_gripper_link';
 
@@ -55,39 +55,8 @@ end
 % Switch to 'row' for collision checking
 robotB.DataFormat = 'row';
 
-% --- Automated search for a collision-free initial configuration ---
-qStart = [initialGuess.JointPosition];
-maxTries = 500;
-found = false;
-for i = 1:maxTries
-    qTest = qStart + 0.05*randn(size(qStart));
-    [isColliding1, sep1] = checkCollision(robotB, qTest, {tableBox}, 'Exhaustive', 'on');
-    [isColliding2, sep2] = checkCollision(robotB, qTest, {bottleInB.collision}, 'Exhaustive', 'on');
-    [isColliding3, sep3] = checkCollision(robotB, qTest, {cardbox}, 'Exhaustive', 'on');
-    minSep = min([min(sep1(:)), min(sep2(:)), min(sep3(:))]);
-    disp(['Try ', num2str(i), ': min sep = ', num2str(minSep)]);
-    if ~any(isColliding1) && ~any(isColliding2) && ~any(isColliding3)
-        disp('Found a collision-free configuration:');
-        disp(qTest);
-        % Update struct config for GIK/IK
-        robotB.DataFormat = 'struct';
-        for j = 1:numel(initialGuess)
-            initialGuess(j).JointPosition = qTest(j);
-        end
-        found = true;
-        break;
-    end
-end
-if ~found
-    warning('Could not find a collision-free configuration nearby.');
-    % Still update struct config for GIK/IK
-    robotB.DataFormat = 'struct';
-    for j = 1:numel(initialGuess)
-        initialGuess(j).JointPosition = qStart(j);
-    end
-end
-% update the initialGuess to find a collision-free configuration
-
+% === Automated search for a collision-free initial configuration ===
+% initialGuess = findCollisionFreeConfig(robotB, initialGuess, tableBox, bottleInB.collision, cardbox); temporarily disable this function
 %%%%%% define the table to avoid and adding more 
 %% 1.  Attach the box to the robot as a fixed body
 % tableBody            = rigidBody("tableObstacle");
@@ -348,7 +317,7 @@ if isReachable
     disp('isCollidingGoal1 (tableBox):'); disp(isCollidingGoal1); disp('min(sepGoal1):'); disp(min(sepGoal1(:)));
     disp('isCollidingGoal2 (bottle):'); disp(isCollidingGoal2); disp('min(sepGoal2):'); disp(min(sepGoal2(:)));
     disp('isCollidingGoal3 (cardbox):'); disp(isCollidingGoal3); disp('min(sepGoal3):'); disp(min(sepGoal3(:)));
-keyboard
+
     % Only proceed if ALL are collision-free
     if ~any(isCollidingGoal1) && ~any(isCollidingGoal2) && ~any(isCollidingGoal3)
         [pathObj, solnInfo] = plan(planner, qStart, qGoal);
@@ -358,19 +327,46 @@ keyboard
 
     robotB.DataFormat = 'struct'; % Restore struct format after planning
 
-    if isempty(pathObj.States)
-        warning('No collision-free path found by the planner (with bottle as obstacle).');
-    else
-        disp('Collision-free path found by manipulatorRRT (with bottle as obstacle). Visualizing...');
-        figure; hold on; axis equal; grid on;
-        show(tableBox);
-        show(cardbox);
-        show(bottleInB.collision);
-        for i = 1:size(pathObj.States,1)
-            show(robotB, pathObj.States(i,:), 'PreservePlot', false, 'Collisions', 'on');
-            drawnow;
+    if isstruct(pathObj) && isfield(pathObj, 'States')
+        if isempty(pathObj.States)
+            warning('No collision-free path found by the planner (with bottle as obstacle).');
+        else
+            disp('Collision-free path found by manipulatorRRT (with bottle as obstacle). Visualizing...');
+            figure; hold on; axis equal; grid on;
+            show(tableBox);
+            show(cardbox);
+            show(bottleInB.collision);
+            for i = 1:size(pathObj.States,1)
+                qStruct = homeConfiguration(robotB);
+                for j = 1:numel(qStruct)
+                    qStruct(j).JointPosition = pathObj.States(i,j);
+                end
+                show(robotB, qStruct, 'PreservePlot', false, 'Collisions', 'on');
+                drawnow;
+            end
+            title('Planned Collision-Free Path (Approach, Bottle as Obstacle)');
         end
-        title('Planned Collision-Free Path (Approach, Bottle as Obstacle)');
+    elseif isnumeric(pathObj)
+        if isempty(pathObj)
+            warning('No collision-free path found by the planner (with bottle as obstacle).');
+        else
+            disp('Collision-free path found by manipulatorRRT (with bottle as obstacle). Visualizing...');
+            figure; hold on; axis equal; grid on;
+            show(tableBox);
+            show(cardbox);
+            show(bottleInB.collision);
+            for i = 1:size(pathObj,1)
+                qStruct = homeConfiguration(robotB);
+                for j = 1:numel(qStruct)
+                    qStruct(j).JointPosition = pathObj(i,j);
+                end
+                show(robotB, qStruct, 'PreservePlot', false, 'Collisions', 'on');
+                drawnow;
+            end
+            title('Planned Collision-Free Path (Approach, Bottle as Obstacle)');
+        end
+    else
+        warning('pathObj is not the expected type.');
     end
     
 else
@@ -480,9 +476,10 @@ end
 disp(solutionInfo3);  % show full diagnostic info
 
 % === Print Final Link Positions ===
-T_gripper = getTransform(robotB, qClose, 'left_gripper_link');
-T_finger1 = getTransform(robotB, qClose, 'left_gripper_finger_link1');
-T_finger2 = getTransform(robotB, qClose, 'left_gripper_finger_link2');
+robotB.DataFormat = 'row';
+T_gripper = getTransform(robotB, [qClose.JointPosition], 'left_gripper_link');
+T_finger1 = getTransform(robotB, [qClose.JointPosition], 'left_gripper_finger_link1');
+T_finger2 = getTransform(robotB, [qClose.JointPosition], 'left_gripper_finger_link2');
 
 pos_gripper = tform2trvec(T_gripper);
 pos_finger1 = tform2trvec(T_finger1);
@@ -517,8 +514,8 @@ v = VideoWriter('robot_grasp_animation.mp4', 'MPEG-4');
 v.FrameRate = 1/animSpeed;
 open(v);
 
-figure('Name','R1 Arm Grasp Animation','Position',[100 100 1200 700]);
-ax = axes; view(45,30); axis equal; grid on; hold on;
+fig1 = figure('Name','R1 Arm Grasp Animation','Position',[100 100 1120 840]);
+ax = axes('Parent', fig1); view(45,30); axis equal; grid on; hold on;
 
 % Draw table as semi-transparent box
 if exist('tableBox','var')
@@ -582,9 +579,9 @@ for t = 1:nTotal
         warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
         keyboard
     end
-    T_gripper = getTransform(robotB, qNow, 'left_gripper_link');
-    T_finger1 = getTransform(robotB, qNow, 'left_gripper_finger_link1');
-    T_finger2 = getTransform(robotB, qNow, 'left_gripper_finger_link2');
+    T_gripper = getTransform(robotB, [qNow.JointPosition], 'left_gripper_link');
+    T_finger1 = getTransform(robotB, [qNow.JointPosition], 'left_gripper_finger_link1');
+    T_finger2 = getTransform(robotB, [qNow.JointPosition], 'left_gripper_finger_link2');
     pos_gripper = tform2trvec(T_gripper);
     pos_finger1 = tform2trvec(T_finger1);
     pos_finger2 = tform2trvec(T_finger2);
@@ -643,7 +640,13 @@ for t = 1:nTotal
     plot3(finger2_traj(1:t,1),finger2_traj(1:t,2),finger2_traj(1:t,3),'g-.','LineWidth',1);
     plot3(finger_center_traj(1:t,1),finger_center_traj(1:t,2),finger_center_traj(1:t,3),'b-','LineWidth',2);
     % Robot
-    show(robotB, qNow, 'PreservePlot', false, 'Parent', ax);
+    robotB.DataFormat = 'struct';
+    qStruct = homeConfiguration(robotB);
+    for j = 1:numel(qStruct)
+        qStruct(j).JointPosition = traj(t,j);
+    end
+    show(robotB, qStruct, 'PreservePlot', false, 'Collisions', 'on', 'Parent', ax);
+    robotB.DataFormat = 'row';
     % Stage markers
     if t==1
         title('Stage 1: Approach','FontSize',14,'Color','b');
@@ -663,7 +666,10 @@ for t = 1:nTotal
     axis equal; grid on;
     pause(animSpeed);
     % --- Capture and write video frame ---
-    frame = getframe(gcf);
+    frame = getframe(fig1);
+    if size(frame.cdata,1) ~= 840 || size(frame.cdata,2) ~= 1120
+        frame.cdata = imresize(frame.cdata, [840, 1120]);
+    end
     writeVideo(v, frame);
 end
 
@@ -676,8 +682,8 @@ v2 = VideoWriter('robot_grasp_topview.mp4', 'MPEG-4');
 v2.FrameRate = 1/animSpeed;
 open(v2);
 
-figure('Name','R1 Arm Grasp Animation (Top View)','Position',[100 100 1200 700]);
-ax2 = axes; view(0,90); axis equal; grid on; hold on;
+fig2 = figure('Name','R1 Arm Grasp Animation (Top View)','Position',[100 100 1120 840]);
+ax2 = axes('Parent', fig2); view(0,90); axis equal; grid on; hold on;
 
 % Draw table as semi-transparent box
 if exist('tableBox','var')
@@ -731,7 +737,13 @@ for t = 1:nTotal
     plot3(finger2_traj(1:t,1),finger2_traj(1:t,2),finger2_traj(1:t,3),'g-.','LineWidth',1);
     plot3(finger_center_traj(1:t,1),finger_center_traj(1:t,2),finger_center_traj(1:t,3),'b-','LineWidth',2);
     % Robot
-    show(robotB, qNow, 'PreservePlot', false, 'Parent', ax2);
+    robotB.DataFormat = 'struct';
+    qStruct = homeConfiguration(robotB);
+    for j = 1:numel(qStruct)
+        qStruct(j).JointPosition = traj(t,j);
+    end
+    show(robotB, qStruct, 'PreservePlot', false, 'Collisions', 'on', 'Parent', ax2);
+    robotB.DataFormat = 'row';
     % Stage markers
     if t==1
         title('Stage 1: Approach (Top View)','FontSize',14,'Color','b');
@@ -751,7 +763,10 @@ for t = 1:nTotal
     axis equal; grid on;
     pause(animSpeed);
     % --- Capture and write video frame ---
-    frame2 = getframe(gcf);
+    frame2 = getframe(fig2);
+    if size(frame2.cdata,1) ~= 840 || size(frame2.cdata,2) ~= 1120
+        frame2.cdata = imresize(frame2.cdata, [840, 1120]);
+    end
     writeVideo(v2, frame2);
 end
 
@@ -967,13 +982,17 @@ plotFinalPositions;
 
 % --- Collision check at initial configuration ---
 disp('--- Collision check at initial configuration ---');
-checkRobotCollisions(robotB, initialGuess, tableBox, bottleInB.collision, cardbox);
+robotB.DataFormat = 'row';
+qVec = [initialGuess.JointPosition];
+checkRobotCollisions(robotB, qVec, tableBox, bottleInB.collision, cardbox);
 
 % ... existing code ...
 
 % --- Collision check at grasp configuration ---
 disp('--- Collision check at grasp configuration ---');
-checkRobotCollisions(robotB, qGrasp, tableBox, bottleInB.collision, cardbox);
+robotB.DataFormat = 'row';
+qVec = [qGrasp.JointPosition];
+checkRobotCollisions(robotB, qVec, tableBox, bottleInB.collision, cardbox);
 
 % ... existing code ...
 
