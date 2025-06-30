@@ -32,10 +32,6 @@ bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
 % Set robotB to struct format for all configuration handling
 robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
-robotB = attachLeftArmCollisionPrimitives(robotB, 'R1Meshes', 'box');
-robotB.DataFormat = 'struct';
-eeName = 'left_gripper_link';
-
 % Arm initial position reference
 % Left arm: 1.56, 2.94, -2.54, 0.0, 0.0, 0.0
 % Right arm: -1.56, 2.94, -2.54, 0.0, 0.0, 0.0
@@ -43,6 +39,11 @@ eeName = 'left_gripper_link';
 % === Define Initial Robot Configuration ===
 initialGuess = homeConfiguration(robotB);
 initialGuess = updateHomePositionforR1_wholeBody(robotB, initialGuess);
+
+robotB = attachLeftArmCollisionPrimitives(robotB, 'R1Meshes', 'box'); %STL-based collision primitives
+%robotB = attachLinkBasedCollisionCylinders(robotB, initialGuess); % Link/joint-based collision cylinders using updated home position
+robotB.DataFormat = 'struct';
+eeName = 'left_gripper_link';
 
 % Ensure finger joints start in open position
 fingerJointNames = {'left_gripper_finger_joint1', 'left_gripper_finger_joint2'};
@@ -573,55 +574,22 @@ for t = 1:nTotal
         qNow(j).JointPosition = traj(t,j);
     end
     qVec = [qNow.JointPosition];
-    % --- Use single output for external objects (cardbox, tableBox) ---
-    inCollision = checkCollision(robotB, qVec, {cardbox, tableBox});
+    % --- Collision check for all obstacles ---
+    inCollision = checkCollision(robotB, qVec, {tableBox, bottleInB.collision, cardbox});
     if inCollision
-        warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
-        keyboard
-    end
-    T_gripper = getTransform(robotB, [qNow.JointPosition], 'left_gripper_link');
-    T_finger1 = getTransform(robotB, [qNow.JointPosition], 'left_gripper_finger_link1');
-    T_finger2 = getTransform(robotB, [qNow.JointPosition], 'left_gripper_finger_link2');
-    pos_gripper = tform2trvec(T_gripper);
-    pos_finger1 = tform2trvec(T_finger1);
-    pos_finger2 = tform2trvec(T_finger2);
-    gripper_traj(t,:) = pos_gripper;
-    finger1_traj(t,:) = pos_finger1;
-    finger2_traj(t,:) = pos_finger2;
-    finger_center_traj(t,:) = (pos_finger1 + pos_finger2)/2;
-    x_diff_traj(t) = finger_center_traj(t,1) - pos_bottle(1);
-    y_diff_traj(t) = finger_center_traj(t,2) - pos_bottle(2);
-end
-
-% Plot full trajectory paths
-plot3(gripper_traj(:,1),gripper_traj(:,2),gripper_traj(:,3),'r--','LineWidth',1.5);
-plot3(finger1_traj(:,1),finger1_traj(:,2),finger1_traj(:,3),'g-.','LineWidth',1);
-plot3(finger2_traj(:,1),finger2_traj(:,2),finger2_traj(:,3),'g-.','LineWidth',1);
-plot3(finger_center_traj(:,1),finger_center_traj(:,2),finger_center_traj(:,3),'b-','LineWidth',2);
-
-% Animation loop
-for t = 1:nTotal
-    qNow = initialGuess;
-    for j = 1:numel(qNow)
-        qNow(j).JointPosition = traj(t,j);
-    end
-    qVec = [qNow.JointPosition];
-    % --- Use single output for external objects (cardbox, tableBox) ---
-    inCollision = checkCollision(robotB, qVec, {cardbox, tableBox});
-    if inCollision
-        warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
+        warning('Collision detected with table, bottle, or cardbox at step %d! Animation halted.', t);
         break;
     end
     cla(ax);
-    % Table
+    % Redraw table
     if exist('tableBox','var')
         fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
     end
-    % Cardboard box
+    % Redraw cardbox
     if exist('cardbox','var')
         show(cardbox, 'Parent', ax);
     end
-    % Bottle
+    % Redraw bottle
     surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
     % Draw bottle top as a filled circle for top view
     theta = linspace(0, 2*pi, 30);
@@ -703,22 +671,22 @@ for t = 1:nTotal
         qNow(j).JointPosition = traj(t,j);
     end
     qVec = [qNow.JointPosition];
-    % --- Use single output for external objects (cardbox, tableBox) ---
-    inCollision = checkCollision(robotB, qVec, {cardbox, tableBox});
+    % --- Collision check for all obstacles ---
+    inCollision = checkCollision(robotB, qVec, {tableBox, bottleInB.collision, cardbox});
     if inCollision
-        warning('Collision detected with cardbox or table at step %d! Animation halted.', t);
+        warning('Collision detected with table, bottle, or cardbox at step %d! Animation halted.', t);
         break;
     end
     cla(ax2);
-    % Table
+    % Redraw table
     if exist('tableBox','var')
         fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
     end
-    % Cardboard box
+    % Redraw cardbox
     if exist('cardbox','var')
         show(cardbox, 'Parent', ax2);
     end
-    % Bottle
+    % Redraw bottle
     surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
     % Draw bottle top as a filled circle for top view
     theta = linspace(0, 2*pi, 30);
@@ -772,6 +740,61 @@ end
 
 close(v2);
 disp('Top-down video saved as robot_grasp_topview.mp4');
+
+% === Front view video export ===
+v3 = VideoWriter('robot_grasp_frontview.mp4', 'MPEG-4');
+v3.FrameRate = 1/animSpeed;
+open(v3);
+
+fig3 = figure('Name','R1 Arm Grasp Animation (Front View)','Position',[100 100 1120 840]);
+ax3 = axes('Parent', fig3); view(90, 0); axis equal; grid on; hold on;
+
+for t = 1:nTotal
+    qNow = initialGuess;
+    for j = 1:numel(qNow)
+        qNow(j).JointPosition = traj(t,j);
+    end
+    qVec = [qNow.JointPosition];
+    % --- Collision check for all obstacles ---
+    inCollision = checkCollision(robotB, qVec, {tableBox, bottleInB.collision, cardbox});
+    if inCollision
+        warning('Collision detected with table, bottle, or cardbox at step %d! Animation halted.', t);
+        break;
+    end
+    cla(ax3);
+    % Redraw table
+    if exist('tableBox','var')
+        fill3(Xb([1 2 4 3]),Yb([1 2 4 3]),Zb([1 2 4 3]),[0.8 0.8 0.8],'FaceAlpha',0.3,'EdgeColor','none');
+    end
+    % Redraw cardbox
+    if exist('cardbox','var')
+        show(cardbox, 'Parent', ax3);
+    end
+    % Redraw bottle
+    surf(bx+pos_bottle(1), by+pos_bottle(2), bz, 'FaceAlpha',0.3, 'EdgeColor','none', 'FaceColor',[0.2 0.5 1]);
+    % Redraw robot
+    robotB.DataFormat = 'struct';
+    qStruct = homeConfiguration(robotB);
+    for j = 1:numel(qStruct)
+        qStruct(j).JointPosition = traj(t,j);
+    end
+    show(robotB, qStruct, 'PreservePlot', false, 'Collisions', 'on', 'Parent', ax3);
+    robotB.DataFormat = 'row';
+    % Camera preset (front)
+    view(ax3, 90, 0);
+    xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
+    axis equal; grid on;
+    pause(animSpeed);
+    % --- Capture and write video frame ---
+    frame3 = getframe(fig3);
+    if size(frame3.cdata,1) ~= 840 || size(frame3.cdata,2) ~= 1120
+        frame3.cdata = imresize(frame3.cdata, [840, 1120]);
+    end
+    writeVideo(v3, frame3);
+end
+
+close(v3);
+disp('Front-view video saved as robot_grasp_frontview.mp4');
 
 % Save final configuration for visualization
 save('final_configuration.mat', 'qClose', 'bottleInB', 'tableBox');
@@ -1065,3 +1088,10 @@ if ~found
         initialGuess(j).JointPosition = qStart(j);
     end
 end
+
+% Visualize robot with link-based collision cylinders
+figure('Name','Robot with Link-Based Collision Cylinders');
+show(robotB, homeConfiguration(robotB), 'Collisions', 'on', 'PreservePlot', false);
+title('Robot with Link-Based Collision Cylinders');
+view(45,30); axis equal; grid on;
+pause; % Wait for user to inspect before continuing
