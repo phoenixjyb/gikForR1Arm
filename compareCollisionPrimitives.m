@@ -9,6 +9,7 @@ robotBox.DataFormat = 'struct';
 robotCyl.DataFormat = 'struct';
 
 robotBox = attachLeftArmCollisionPrimitives(robotBox, 'R1Meshes', 'box');
+
 robotCyl = attachLeftArmCollisionPrimitives(robotCyl, 'R1Meshes', 'cylinder');
 
 qHome = homeConfiguration(robotBox);

@@ -31,18 +31,28 @@ graspOffset = trvec2tform([0.0, 0, 0]); % 0cm forward offset for the tool
 bottleInB.graspPose = bottleInB.pose * T_graspLocal * graspOffset;
 
 % Set robotB to struct format for all configuration handling
-robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
+
+% robotB = importrobot('fineUrdfs/r1_v2_1_0.urdf');
+
+r1_urdf_file = fullfile('fineUrdfs', 'R1_v2_1_0.urdf');
+r1_mesh_folder = 'R1Meshes';
+robotB = importrobot(r1_urdf_file, 'MeshPath', r1_mesh_folder, 'DataFormat', 'row'); % import mesh files together
+robotB.Gravity = [0 0 -9.81];
+
 % Arm initial position reference
 % Left arm: 1.56, 2.94, -2.54, 0.0, 0.0, 0.0
 % Right arm: -1.56, 2.94, -2.54, 0.0, 0.0, 0.0
+
+robotB.DataFormat = 'struct';
 
 % === Define Initial Robot Configuration ===
 initialGuess = homeConfiguration(robotB);
 initialGuess = updateHomePositionforR1_wholeBody(robotB, initialGuess);
 
-robotB = attachLeftArmCollisionPrimitives(robotB, 'R1Meshes', 'box'); %STL-based collision primitives
-%robotB = attachLinkBasedCollisionCylinders(robotB, initialGuess); % Link/joint-based collision cylinders using updated home position
-robotB.DataFormat = 'struct';
+% robotB = attachLeftArmCollisionPrimitives(robotB, 'R1Meshes', 'box'); %STL-based collision primitives
+% robotB = attachLinkBasedCollisionCylinders(robotB, initialGuess); % Link/joint-based collision cylinders using updated home position
+
+
 eeName = 'left_gripper_link';
 
 % Ensure finger joints start in open position
